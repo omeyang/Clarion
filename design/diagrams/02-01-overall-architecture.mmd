@@ -1,0 +1,49 @@
+flowchart TB
+    subgraph L1["1. 用户交互层"]
+        Admin["管理后台<br/>上传名单 / 创建任务<br/>查看结果 / 录音 / 摘要"]
+        WeCom["企业微信通知<br/>高优联系人推送<br/>任务结果 / 异常提醒"]
+    end
+
+    subgraph L2["2. 领域配置与业务编排层"]
+        API["HTTP 管理面<br/>任务CRUD / 模板管理<br/>结果查询 / 名单导入"]
+        Domain["领域适配组件<br/>场景模板 / 状态机配置<br/>字段Schema / 分级规则<br/>话术模板"]
+    end
+
+    subgraph L3["3. 实时会话运行时"]
+        CW["Call Worker 进程<br/>通话生命周期管理<br/>流式管道编排<br/>媒体状态机"]
+        PP["Post-Processing Worker<br/>摘要生成 / 结果落库<br/>录音上传 / 通知推送"]
+    end
+
+    subgraph L4["4. 通信控制层"]
+        FS["FreeSWITCH<br/>外呼发起 / SIP管理<br/>音频输入输出<br/>录音控制 / 会话事件"]
+        Callee["被叫联系人"]
+    end
+
+    subgraph L5["5. AI 能力层（流式接口）"]
+        ASR["ASR Provider<br/>MVP: 阿里云实时ASR<br/>备选: FunASR"]
+        LLM["LLM Provider<br/>DeepSeek（流式SSE）"]
+        TTS["TTS Provider<br/>MVP: 阿里云流式TTS<br/>备选: CosyVoice"]
+    end
+
+    subgraph L6["6. 数据存储层"]
+        PG["PostgreSQL<br/>联系人/任务/通话/模板/事件"]
+        Redis["Redis<br/>会话状态/队列/锁/限流"]
+        OSS["对象存储<br/>录音/导出文件"]
+    end
+
+    Admin --> API
+    WeCom <--> API
+    Domain <--> API
+    API -->|"外呼任务队列"| Redis
+    CW -->|"取任务"| Redis
+    CW <--> FS
+    FS <--> Callee
+    CW --> ASR
+    CW --> LLM
+    CW --> TTS
+    CW -->|"通话完成事件"| Redis
+    PP -->|"消费事件"| Redis
+    PP --> PG
+    PP --> OSS
+    PP --> WeCom
+    API <--> PG

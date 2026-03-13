@@ -1,0 +1,32 @@
+flowchart LR
+    subgraph BIZ["Call Worker"]
+        CW["实时会话管道"]
+    end
+
+    subgraph API["流式 Provider 接口层"]
+        ASR["asr_provider<br/>start_stream / feed_audio<br/>on_partial / on_final<br/>on_endpoint / stop"]
+        LLM["llm_provider<br/>generate_stream<br/>→ Iterator of tokens"]
+        TTS["tts_provider<br/>synthesize_stream<br/>→ Iterator of audio chunks<br/>supports cancel"]
+    end
+
+    subgraph MVP["MVP Provider 实现"]
+        AliyunASR["阿里云实时ASR"]
+        DeepSeek["DeepSeek SSE"]
+        AliyunTTS["阿里云流式TTS"]
+    end
+
+    subgraph LOCAL["本地 Provider（后续可切换）"]
+        FunASR["FunASR"]
+        CosyVoice["CosyVoice"]
+    end
+
+    CW --> ASR
+    CW --> LLM
+    CW --> TTS
+
+    ASR --> AliyunASR
+    LLM --> DeepSeek
+    TTS --> AliyunTTS
+
+    ASR -.后续可切换.-> FunASR
+    TTS -.后续可切换.-> CosyVoice

@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<!--
+  内部 SIP profile — 支持外部 SIP 软电话注册
+  监听 5060 端口，使用公网 IP 进行 NAT 穿透
+-->
+<profile name="internal">
+  <settings>
+    <param name="debug" value="0"/>
+    <param name="sip-trace" value="yes"/>
+
+    <!-- 内部监听 -->
+    <param name="sip-ip" value="$${local_ip_v4}"/>
+    <param name="sip-port" value="5060"/>
+    <param name="rtp-ip" value="$${local_ip_v4}"/>
+
+    <!-- NAT 穿透：告诉远端 SIP/RTP 使用公网 IP -->
+    <param name="ext-rtp-ip" value="$${ext_rtp_ip}"/>
+    <param name="ext-sip-ip" value="$${ext_sip_ip}"/>
+
+    <!-- RTP 端口范围 -->
+    <param name="rtp-timer-name" value="soft"/>
+
+    <!-- 注册与认证 -->
+    <param name="context" value="default"/>
+    <param name="challenge-realm" value="auto_from"/>
+
+    <!--
+      强制注册域名映射：Linphone 用公网 IP 注册，
+      但 directory 中 domain 是容器内网 IP，需要强制对齐
+    -->
+    <param name="force-register-domain" value="$${local_ip_v4}"/>
+    <param name="force-register-db-domain" value="$${local_ip_v4}"/>
+    <param name="force-subscription-domain" value="$${local_ip_v4}"/>
+
+    <!-- 编解码（G.711 优先，兼容性最好） -->
+    <param name="codec-prefs" value="PCMU,PCMA,opus"/>
+    <param name="inbound-codec-negotiation" value="generous"/>
+
+    <!-- 允许注册 -->
+    <param name="accept-blind-reg" value="false"/>
+    <param name="accept-blind-auth" value="false"/>
+
+    <!-- NAT 相关 -->
+    <param name="aggressive-nat-detection" value="true"/>
+    <param name="apply-nat-acl" value="rfc1918.auto"/>
+    <param name="NDLB-received-in-nat-reg-contact" value="true"/>
+
+    <!-- 不管理 presence（简化） -->
+    <param name="manage-presence" value="false"/>
+  </settings>
+</profile>

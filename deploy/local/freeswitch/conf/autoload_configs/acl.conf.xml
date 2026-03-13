@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<!-- ACL 配置 — 入口脚本会自动添加 socket_acl -->
+<configuration name="acl.conf" description="Network Lists">
+  <network-lists>
+    <list name="lan" default="allow">
+      <node type="allow" cidr="0.0.0.0/0"/>
+    </list>
+  <list name="socket_acl" default="deny"><node type="allow" cidr="0.0.0.0/0"/></list><list name="socket_acl" default="deny"><node type="allow" cidr="0.0.0.0/0"/></list><list name="socket_acl" default="deny"><node type="allow" cidr="0.0.0.0/0"/></list><list name="socket_acl" default="deny"><node type="allow" cidr="0.0.0.0/0"/></list><list name="socket_acl" default="deny"><node type="allow" cidr="0.0.0.0/0"/></list><list name="socket_acl" default="deny"><node type="allow" cidr="0.0.0.0/0"/></list></network-lists>
+</configuration>

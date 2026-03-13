@@ -1,0 +1,62 @@
+<?xml version="1.0"?>
+<!--
+  Clarion 拨号计划
+
+  扩展说明：
+  - 10xx: 用户间互拨（SIP 软电话 → SIP 软电话）
+  - 9000: AI 呼叫测试 — 接听后 park，由 Call Worker 通过 ESL 控制
+  - echo: 回声测试（调试音频链路）
+  - loopback_test: 回环测试（Call Worker 自动化测试）
+-->
+<include>
+  <context name="default">
+
+    <!-- AI 呼叫测试 — Linphone 拨 9000，由 Call Worker 接管 -->
+    <extension name="ai_call">
+      <condition field="destination_number" expression="^9000$">
+        <action application="answer"/>
+        <action application="sleep" data="500"/>
+        <!-- park 后由 Call Worker 通过 ESL 控制 audio_fork -->
+        <action application="park"/>
+      </condition>
+    </extension>
+
+    <!-- 用户间互拨（1000-1099） -->
+    <extension name="local_extension">
+      <condition field="destination_number" expression="^(10\d{2})$">
+        <action application="bridge" data="user/$1@$${local_ip_v4}"/>
+      </condition>
+    </extension>
+
+    <!-- 回环测试 — 模拟被叫接听并说话 -->
+    <extension name="loopback_test">
+      <condition field="destination_number" expression="^loopback_test$">
+        <action application="answer"/>
+        <action application="sleep" data="500"/>
+        <action application="playback" data="/tmp/test-audio/user-speech.wav"/>
+        <action application="sleep" data="15000"/>
+        <action application="playback" data="/tmp/test-audio/user-reply.wav"/>
+        <action application="sleep" data="15000"/>
+        <action application="hangup" data="NORMAL_CLEARING"/>
+      </condition>
+    </extension>
+
+    <!-- 静音测试 — 测试静音超时 -->
+    <extension name="silence_test">
+      <condition field="destination_number" expression="^silence_test$">
+        <action application="answer"/>
+        <action application="sleep" data="30000"/>
+        <action application="hangup" data="NORMAL_CLEARING"/>
+      </condition>
+    </extension>
+
+    <!-- 回声测试 — 调试音频链路 -->
+    <extension name="echo_test">
+      <condition field="destination_number" expression="^echo$">
+        <action application="answer"/>
+        <action application="echo"/>
+      </condition>
+    </extension>
+
+  </context>
+</include>

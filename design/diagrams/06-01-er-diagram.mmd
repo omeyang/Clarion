@@ -1,0 +1,101 @@
+erDiagram
+    SCENARIO_TEMPLATES ||--o{ TEMPLATE_SNAPSHOTS : generates
+    SCENARIO_TEMPLATES ||--o{ CALL_TASKS : binds
+    TEMPLATE_SNAPSHOTS ||--o{ CALL_TASKS : uses
+    TEMPLATE_SNAPSHOTS ||--o{ CALLS : uses
+    CONTACTS ||--o{ CALLS : receives
+    CALL_TASKS ||--o{ CALLS : generates
+    CALLS ||--o{ DIALOGUE_TURNS : contains
+    CALLS ||--o{ CALL_EVENTS : logs
+
+    CONTACTS {
+        bigint id PK
+        string phone_masked
+        string phone_hash
+        string source
+        jsonb profile_json
+        string current_status
+        boolean do_not_call
+        datetime created_at
+    }
+
+    SCENARIO_TEMPLATES {
+        bigint id PK
+        string name
+        string domain
+        text opening_script
+        jsonb state_machine_config
+        jsonb extraction_schema
+        jsonb grading_rules
+        jsonb prompt_templates
+        jsonb notification_config
+        jsonb call_protection_config
+        jsonb precompiled_audios
+        string status
+        int version
+        datetime created_at
+    }
+
+    TEMPLATE_SNAPSHOTS {
+        bigint id PK
+        bigint template_id FK
+        jsonb snapshot_data
+        datetime created_at
+    }
+
+    CALL_TASKS {
+        bigint id PK
+        string name
+        bigint scenario_template_id FK
+        bigint template_snapshot_id FK
+        jsonb contact_filter
+        jsonb schedule_config
+        int daily_limit
+        int max_concurrent
+        string status
+        datetime created_at
+    }
+
+    CALLS {
+        bigint id PK
+        bigint contact_id FK
+        bigint task_id FK
+        bigint template_snapshot_id FK
+        string session_id
+        string status
+        string answer_type
+        int duration
+        string record_url
+        text transcript
+        jsonb extracted_fields
+        string result_grade
+        string next_action
+        jsonb rule_trace
+        text ai_summary
+        datetime created_at
+    }
+
+    DIALOGUE_TURNS {
+        bigint id PK
+        bigint call_id FK
+        int turn_number
+        string speaker
+        text content
+        string state_before
+        string state_after
+        int asr_latency_ms
+        int llm_latency_ms
+        int tts_latency_ms
+        float asr_confidence
+        boolean is_interrupted
+        datetime created_at
+    }
+
+    CALL_EVENTS {
+        bigint id PK
+        bigint call_id FK
+        string event_type
+        bigint timestamp_ms
+        jsonb metadata_json
+        datetime created_at
+    }

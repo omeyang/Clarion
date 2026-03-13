@@ -1,0 +1,41 @@
+flowchart LR
+    subgraph TEL["电话网络"]
+        User["被叫用户<br/>手机/座机"]
+    end
+
+    subgraph FS_NODE["FreeSWITCH"]
+        SIP["SIP 呼叫控制"]
+        AF["mod_audio_fork<br/>WebSocket 音频推送"]
+        REC["录音模块<br/>mod_record"]
+        ESL["ESL 事件接口"]
+    end
+
+    subgraph CW_NODE["Call Worker 进程"]
+        WS["WebSocket<br/>音频接收/发送"]
+        RESAMPLE["重采样<br/>8kHz↔16kHz"]
+        PIPELINE["流式管道<br/>VAD→ASR→LLM→TTS"]
+        MSM["媒体状态机"]
+        BSM["业务状态机"]
+    end
+
+    subgraph AI["AI Provider"]
+        ASR["流式 ASR"]
+        LLM["流式 LLM"]
+        TTS["流式 TTS"]
+    end
+
+    User <-->|"语音通话"| SIP
+    SIP --> AF
+    AF -->|"用户音频流<br/>8kHz PCMU"| WS
+    WS -->|"AI音频流<br/>8kHz PCM"| AF
+    AF --> SIP
+
+    WS --> RESAMPLE
+    RESAMPLE --> PIPELINE
+    PIPELINE --> ASR
+    PIPELINE --> LLM
+    PIPELINE --> TTS
+
+    ESL <-->|"事件/命令<br/>接通/挂断/uuid_break"| MSM
+
+    SIP --> REC

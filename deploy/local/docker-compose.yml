@@ -1,0 +1,63 @@
+# Clarion 本地开发环境
+#
+# 用法：
+#   cd deploy/local
+#   podman-compose up -d           # 启动所有服务
+#   podman-compose logs -f fs      # 查看 FreeSWITCH 日志
+#   podman-compose down            # 停止
+#
+# 环境变量：
+#   EXT_IP - 公网 IP，用于 SIP/RTP NAT 穿透（默认 127.0.0.1）
+
+services:
+  pg:
+    image: docker.io/library/postgres:17-alpine
+    environment:
+      POSTGRES_USER: clarion
+      POSTGRES_PASSWORD: clarion
+      POSTGRES_DB: clarion
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ../../migrations/001_initial_schema.up.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clarion"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  fs:
+    image: drachtio/drachtio-freeswitch-mrf:latest
+    # 使用 host 网络模式：podman rootless 的 UDP 端口映射不可靠，
+    # SIP/RTP 必须用 UDP，host 模式最简单可靠
+    network_mode: host
+    volumes:
+      # 用我们的配置覆盖镜像默认配置
+      # 注意：不能用 :ro，容器入口脚本需要 sed 替换变量（如 EXT_IP）
+      - ./freeswitch/conf/freeswitch.xml:/usr/local/freeswitch/conf/freeswitch.xml
+      - ./freeswitch/conf/autoload_configs:/usr/local/freeswitch/conf/autoload_configs
+      - ./freeswitch/conf/sip_profiles:/usr/local/freeswitch/conf/sip_profiles
+      - ./freeswitch/conf/dialplan:/usr/local/freeswitch/conf/dialplan
+      - ./freeswitch/conf/directory:/usr/local/freeswitch/conf/directory
+      # 共享临时目录：Worker 写入 TTS 音频，FreeSWITCH 播放
+      - /tmp/clarion-audio:/tmp/clarion-audio
+    environment:
+      # 公网 IP，SIP/RTP NAT 穿透用
+      EXT_IP: "${EXT_IP:-127.0.0.1}"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  pg_data:

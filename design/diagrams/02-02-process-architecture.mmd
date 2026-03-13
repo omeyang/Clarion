@@ -1,0 +1,28 @@
+flowchart LR
+    subgraph MGMT["HTTP 管理面"]
+        A1["任务 CRUD"]
+        A2["模板管理"]
+        A3["结果查询"]
+        A4["名单导入"]
+    end
+
+    subgraph RT["Call Worker 通话面（可多实例）"]
+        B1["FreeSWITCH<br/>WebSocket 连接"]
+        B2["媒体状态机"]
+        B3["流式管道<br/>VAD→ASR→LLM→TTS"]
+        B4["业务状态机"]
+    end
+
+    subgraph POST["Post-Processing 后处理面"]
+        C1["摘要生成"]
+        C2["结果写入 PostgreSQL"]
+        C3["录音上传 OSS"]
+        C4["企业微信通知"]
+    end
+
+    Q["Redis<br/>任务队列 / 事件流"]
+
+    MGMT -->|"派发外呼任务"| Q
+    Q -->|"取任务"| RT
+    RT -->|"通话完成事件"| Q
+    Q -->|"消费事件"| POST

@@ -1,0 +1,31 @@
+flowchart TB
+    A["上传联系人名单"] --> B["创建外呼任务"]
+    B --> C["选择领域模板<br/>生成运行时快照"]
+    C --> D["系统筛选待触达对象"]
+    D --> E["Admission Control<br/>检查并发容量"]
+    E --> F["Call Worker<br/>发起外呼"]
+
+    F --> G{"是否接通"}
+    G -- 否 --> G1["记录失败原因"]
+    G -- 是 --> AMD{"AMD 检测"}
+    AMD -- 语音信箱 --> G1
+    AMD -- 真人 --> H["进入实时对话"]
+
+    subgraph HOT["热路径：实时通话中"]
+        H --> LOOP["流式管道循环<br/>VAD→ASR→LLM→规则→TTS→播放"]
+        LOOP --> END_CHECK{"结束条件"}
+        END_CHECK -- 否 --> LOOP
+        END_CHECK -- 是 --> HANGUP["挂断"]
+    end
+
+    subgraph COLD["冷路径：异步后处理"]
+        PP1["摘要生成"]
+        PP2["结果写入 PostgreSQL"]
+        PP3["录音上传 OSS"]
+        PP4{"分级结果"}
+        PP4 -- 需人工跟进 --> PP5["企业微信通知"]
+        PP4 -- 无需跟进 --> PP6["流程结束"]
+    end
+
+    G1 --> COLD
+    HANGUP --> COLD

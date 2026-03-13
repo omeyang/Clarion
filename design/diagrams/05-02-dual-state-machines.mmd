@@ -1,0 +1,24 @@
+flowchart TB
+    subgraph MEDIA["媒体状态机（管交互节奏）"]
+        direction LR
+        M1["BOT_SPEAKING"] --> M2["WAITING_USER"]
+        M2 --> M3["USER_SPEAKING"]
+        M3 --> M4["PROCESSING"]
+        M4 --> M1
+        M1 -.->|"打断"| M5["BARGE_IN"]
+        M5 --> M3
+        M2 -.->|"超时"| M6["SILENCE_TIMEOUT"]
+    end
+
+    subgraph BIZ["业务状态机（管对话内容）"]
+        direction LR
+        B1["Opening"] --> B2["Qualification"]
+        B2 --> B3["InformationGathering"]
+        B3 --> B4["NextAction"]
+        B4 --> B5["Closing"]
+    end
+
+    M4 -->|"PROCESSING 时<br/>驱动业务状态机"| BIZ
+    BIZ -->|"决定回复内容<br/>和下一业务状态"| M4
+
+    HANGUP["任意时刻检测到挂断"] -->|"直接跳转"| POST["POST_PROCESSING<br/>异步后处理"]

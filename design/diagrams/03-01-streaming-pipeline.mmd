@@ -1,0 +1,17 @@
+flowchart LR
+    FS["FreeSWITCH<br/>音频流"] --> CONV["音频格式转换<br/>8kHz G.711<br/>→ 16kHz PCM16"]
+    CONV --> VAD["VAD<br/>语音活动检测"]
+
+    VAD -->|"语音开始"| ASR["流式 ASR<br/>边说边转写<br/>partial → final"]
+    VAD -->|"静默超时"| TIMEOUT["静默处理<br/>提醒 / 挂断"]
+
+    ASR -->|"final 结果"| LLM["LLM 流式生成<br/>SSE 逐 token 返回"]
+    LLM -->|"首批 token"| TTS["流式 TTS<br/>边合成边输出<br/>首包优先"]
+    TTS -->|"首个音频块"| PLAY["回送 FreeSWITCH<br/>立即开始播放"]
+
+    PLAY -.->|"用户打断"| STOP["停止播放<br/>uuid_break<br/>清空缓冲"]
+    STOP --> VAD
+
+    style VAD fill:#f9f,stroke:#333
+    style TIMEOUT fill:#fcc,stroke:#333
+    style STOP fill:#fcc,stroke:#333

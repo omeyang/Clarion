@@ -1,0 +1,27 @@
+flowchart LR
+    ASR_OUT["ASR 转写结果"] --> LLM_BOX
+
+    subgraph LLM_BOX["LLM 负责：理解与辅助生成"]
+        I["意图识别"]
+        F["字段提取"]
+        O["异议识别"]
+        D["候选回复草稿"]
+    end
+
+    subgraph RULE_BOX["规则引擎负责：业务决策"]
+        CTX["当前状态 + 上下文"]
+        SM["状态机：当前阶段"]
+        SC["场景模板：schema/规则"]
+        DEC["决策输出"]
+    end
+
+    LLM_BOX -->|"判断参考"| RULE_BOX
+    CTX --> DEC
+    SM --> DEC
+    SC --> DEC
+
+    DEC --> REPLY["回复构建<br/>模板 + LLM草稿"]
+    REPLY --> TTS_OUT["流式 TTS"]
+
+    NOTE1["边界：LLM输出是参考<br/>不是最终决策"]
+    NOTE2["边界：是否继续/转人工/结束<br/>必须由规则引擎输出"]

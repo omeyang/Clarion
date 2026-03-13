@@ -1,0 +1,32 @@
+stateDiagram-v2
+    [*] --> IDLE
+
+    IDLE --> DIALING : 发起外呼
+    DIALING --> RINGING : SIP 100/180
+    DIALING --> HANGUP : 呼叫失败
+
+    RINGING --> AMD_DETECTING : 接通 (200 OK)
+    RINGING --> HANGUP : 无人接听 / 拒接
+
+    AMD_DETECTING --> BOT_SPEAKING : 检测为真人<br/>播放开场白
+    AMD_DETECTING --> HANGUP : 检测为语音信箱
+
+    BOT_SPEAKING --> WAITING_USER : 播放完毕
+    BOT_SPEAKING --> BARGE_IN : 用户打断
+
+    WAITING_USER --> USER_SPEAKING : VAD 检测到语音
+    WAITING_USER --> SILENCE_TIMEOUT : 静默超时
+
+    USER_SPEAKING --> PROCESSING : ASR final 结果
+    USER_SPEAKING --> HANGUP : 用户挂断
+
+    PROCESSING --> BOT_SPEAKING : TTS 首包就绪<br/>开始播放
+    PROCESSING --> HANGUP : 处理超时 / 错误
+
+    BARGE_IN --> USER_SPEAKING : 停止播放<br/>开始新一轮 ASR
+
+    SILENCE_TIMEOUT --> BOT_SPEAKING : 播放提醒话术
+    SILENCE_TIMEOUT --> HANGUP : 二次静默<br/>礼貌挂断
+
+    HANGUP --> POST_PROCESSING : 触发异步后处理
+    POST_PROCESSING --> [*]

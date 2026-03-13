@@ -1,0 +1,49 @@
+stateDiagram-v2
+    [*] --> Opening
+
+    Opening : 表明身份
+    Opening : 确认是否方便沟通
+
+    Qualification : 判断是否值得继续沟通
+    Qualification : 获取关键字段
+    Qualification : 判断是否属于目标人群
+
+    InformationGathering : 补全缺失字段
+    InformationGathering : 提高人工接手效率
+
+    ObjectionHandling : 处理没兴趣/没空/不需要
+    ObjectionHandling : 判断是否还有继续必要
+
+    NextAction : 引导下一步动作
+    NextAction : 加微信/预约回访/约时间
+
+    MarkForFollowup : 标记需要人工跟进
+    MarkForFollowup : 触发异步通知与落库
+
+    Closing : 结束对话
+    Closing : 收口并记录结果
+
+    Opening --> Qualification : 愿意继续
+    Opening --> Closing : 拒绝/不方便
+
+    Qualification --> InformationGathering : 目标人群<br/>关键字段缺失
+    Qualification --> NextAction : 可推进下一步
+    Qualification --> ObjectionHandling : 出现异议
+    Qualification --> Closing : 非目标人群
+
+    InformationGathering --> InformationGathering : 仍有缺失字段
+    InformationGathering --> NextAction : 信息已足够
+    InformationGathering --> ObjectionHandling : 出现异议
+    InformationGathering --> Closing : 明确拒绝
+
+    ObjectionHandling --> InformationGathering : 化解但仍需补字段
+    ObjectionHandling --> NextAction : 化解且可推进
+    ObjectionHandling --> MarkForFollowup : 高价值需人工
+    ObjectionHandling --> Closing : 拒绝
+
+    NextAction --> MarkForFollowup : 需人工跟进
+    NextAction --> Closing : 本轮结束
+
+    MarkForFollowup --> Closing : 通知已触发
+
+    Closing --> [*]

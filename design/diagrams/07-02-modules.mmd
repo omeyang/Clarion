@@ -1,0 +1,51 @@
+flowchart TB
+    subgraph MGMT["HTTP 管理面"]
+        TS["task_service<br/>任务调度"]
+        SS["scenario_service<br/>模板管理"]
+        AA["admin_api<br/>后台查询"]
+        ES["export_service<br/>导出"]
+    end
+
+    subgraph CW["Call Worker 通话面"]
+        CS["call_service<br/>外呼控制"]
+        MSM["media_state_machine<br/>媒体状态机"]
+        SP["streaming_pipeline<br/>流式管道"]
+        DE["dialogue_engine<br/>业务状态机"]
+        RE["rule_engine<br/>规则判断"]
+        SESS["session_service<br/>会话管理"]
+        AC["admission_controller<br/>准入控制"]
+    end
+
+    subgraph POST["Post-Processing Worker"]
+        SUM["summary_service<br/>摘要生成"]
+        RES["result_service<br/>结果落库"]
+        STO["storage_service<br/>录音上传"]
+        NOT["notification_service<br/>通知推送"]
+        CLS["classifier_service<br/>分级"]
+    end
+
+    subgraph AI["AI Provider（流式）"]
+        ASR["asr_provider"]
+        LLM["llm_provider"]
+        TTS["tts_provider"]
+    end
+
+    subgraph DOM["领域适配"]
+        SCH["extraction_schema"]
+        PRM["prompt_templates"]
+        GRD["grading_rules"]
+        ACT["next_actions"]
+    end
+
+    TS --> CS
+    CS --> MSM
+    MSM --> SP
+    SP --> DE
+    DE --> RE
+    SP --> ASR
+    SP --> LLM
+    SP --> TTS
+    DE --> DOM
+    RE --> DOM
+    CLS --> DOM
+    NOT --> WeCom["企业微信"]

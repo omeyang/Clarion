@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<!--
+  模块加载列表
+  注意：G.711 (PCMU/PCMA) 已内置于 FreeSWITCH 核心，无需单独加载
+  注意：drachtio/drachtio-freeswitch-mrf 镜像无 mod_loopback
+-->
+<configuration name="modules.conf" description="Modules">
+  <modules>
+    <!-- 核心 -->
+    <load module="mod_console"/>
+    <load module="mod_logfile"/>
+    <load module="mod_event_socket"/>
+
+    <!-- 编解码（G.711 已内置，仅需加载 opus） -->
+    <load module="mod_opus"/>
+    <load module="mod_spandsp"/>
+
+    <!-- 拨号计划 -->
+    <load module="mod_dialplan_xml"/>
+    <load module="mod_commands"/>
+    <load module="mod_dptools"/>
+
+    <!-- 端点 -->
+    <load module="mod_sofia"/>
+
+    <!-- 媒体 -->
+    <load module="mod_sndfile"/>
+    <load module="mod_native_file"/>
+    <load module="mod_tone_stream"/>
+
+    <!-- 音频流转发到 WebSocket -->
+    <load module="mod_audio_fork"/>
+  </modules>
+</configuration>

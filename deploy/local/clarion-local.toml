@@ -1,0 +1,81 @@
+# Clarion 本地开发配置
+#
+# 配合 docker-compose.yml 使用：
+#   EXT_IP=34.172.12.126 podman-compose up -d       # 启动 PG/Redis/FreeSWITCH
+#   source .env && go run ./cmd/worker -c deploy/local/clarion-local.toml
+#
+# AI 服务 API Key 通过环境变量或 .env 注入：
+#   export CLARION_ASR_API_KEY=your-dashscope-key
+#   export CLARION_LLM_API_KEY=your-deepseek-key
+#   export CLARION_TTS_API_KEY=your-dashscope-key
+
+[server]
+addr = ":8000"
+debug = true
+log_level = "debug"
+
+[database]
+dsn = "postgres://clarion:clarion@localhost:5432/clarion?sslmode=disable"
+max_open_conns = 5
+max_idle_conns = 2
+
+[redis]
+addr = "localhost:6379"
+password = ""
+db = 0
+task_queue_key = "clarion:task_queue"
+event_stream_key = "clarion:call_completed"
+session_prefix = "clarion:session"
+
+[asr]
+provider = "qwen"
+api_key = ""          # CLARION_ASR_API_KEY
+model = "qwen3-asr-flash-realtime"
+sample_rate = 16000
+
+[llm]
+provider = "deepseek"
+api_key = ""          # CLARION_LLM_API_KEY
+base_url = "https://api.deepseek.com"
+model = "deepseek-chat"
+max_tokens = 512
+temperature = 0.7
+timeout_ms = 8000
+
+[tts]
+provider = "dashscope"
+api_key = ""          # CLARION_TTS_API_KEY
+model = "cosyvoice-v3-flash"
+voice = "longanyang"
+sample_rate = 16000
+
+[freeswitch]
+# Docker 容器内的 FreeSWITCH，端口映射到宿主机
+esl_host = "127.0.0.1"
+esl_port = 8021
+esl_password = "ClueCon"
+# Call Worker 的 WebSocket 监听地址
+audio_ws_addr = ":8765"
+# FreeSWITCH 使用 host 网络模式，直接连本机 WebSocket
+audio_ws_host = "127.0.0.1:8765"
+# FreeSWITCH 的 SIP 域名（local_ip_v4），用于呼叫本地 SIP 用户
+sip_domain = "10.128.0.10"
+
+[call_protection]
+max_duration_sec = 120      # SIP 测试 2 分钟
+max_silence_sec = 15
+ring_timeout_sec = 30
+first_silence_timeout_sec = 6
+max_asr_retries = 2
+max_consecutive_errors = 3
+max_turns = 10
+
+[amd]
+enabled = false             # SIP 软电话测试关闭 AMD
+energy_threshold_dbfs = -18.0  # 提高阈值，减少背景噪音误触发 barge-in（-25太敏感）
+
+[oss]
+enabled = false
+
+[worker]
+max_concurrent_calls = 1

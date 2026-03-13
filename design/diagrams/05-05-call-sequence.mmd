@@ -1,0 +1,50 @@
+sequenceDiagram
+    autonumber
+    participant Task as task_service
+    participant CW as Call Worker
+    participant FS as FreeSWITCH
+    participant User as 被叫联系人
+    participant ASR as 流式ASR
+    participant LLM as 流式LLM
+    participant Rule as 规则引擎
+    participant TTS as 流式TTS
+    participant Q as Redis队列
+    participant PP as Post-Processor
+
+    Task->>Q: 派发外呼任务（含模板快照ID）
+    CW->>Q: 取任务
+    CW->>FS: originate 呼叫
+    FS->>User: 拨号
+
+    alt 未接通/语音信箱
+        FS-->>CW: 失败事件
+        CW->>Q: 写入完成事件（失败）
+    else 接通且为真人
+        FS-->>CW: 接通事件
+        CW->>FS: 播放预合成开场白
+
+        loop 实时对话循环
+            User-->>FS: 用户语音
+            FS-->>CW: 音频流（WebSocket）
+            CW->>ASR: 流式送入音频
+            ASR-->>CW: partial/final 结果
+            CW->>LLM: 理解意图+提取字段（流式）
+            LLM-->>CW: 流式token
+            CW->>Rule: 当前状态+字段+意图
+            Rule-->>CW: 决策（下一状态/回复策略）
+            CW->>TTS: 流式合成回复
+            TTS-->>FS: 流式音频播放
+            Note over CW: 如用户打断→uuid_break→新一轮
+        end
+
+        FS-->>CW: 挂断事件
+        CW->>Q: 写入完成事件（含原始对话数据）
+    end
+
+    PP->>Q: 消费完成事件
+    PP->>LLM: 生成通话摘要
+    PP->>PP: 写入 PostgreSQL（结构化结果）
+    PP->>PP: 上传录音到 OSS
+    opt 需要人工跟进
+        PP->>PP: 推送企业微信通知
+    end

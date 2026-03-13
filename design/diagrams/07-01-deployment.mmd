@@ -1,0 +1,37 @@
+flowchart LR
+    Admin["管理后台"] --> App
+
+    subgraph Host["Linux Server"]
+        subgraph Compose["Podman Compose"]
+            App["Go HTTP Server<br/>管理面"]
+            PG["PostgreSQL"]
+            Redis["Redis"]
+        end
+        CW["Call Worker<br/>通话面<br/>（可多实例）"]
+        PP["Post-Processing<br/>Worker"]
+    end
+
+    subgraph FS_NODE["FreeSWITCH<br/>（同机或独立）"]
+        FS["FreeSWITCH<br/>SIP / 媒体 / 录音"]
+    end
+
+    subgraph External["外部依赖"]
+        AI["阿里云 ASR/TTS<br/>DeepSeek LLM"]
+        OSS_EXT["云 OSS"]
+        WeCom["企业微信"]
+        Tel["电话线路"]
+    end
+
+    App <--> PG
+    App <--> Redis
+    CW <--> Redis
+    PP <--> Redis
+    PP --> PG
+    PP --> OSS_EXT
+    PP --> WeCom
+    CW <--> FS
+    FS <--> Tel
+    CW <--> AI
+
+    SKIP["当前不做<br/>Kubernetes / 多机高可用<br/>服务网格 / 微服务拆分"]
+    SKIP -.-> Host

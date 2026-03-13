@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!-- Clarion FreeSWITCH 配置 — SIP 注册 + mod_audio_fork 音频流 -->
+<document type="freeswitch/xml">
+
+  <!-- 全局变量：公网 IP（用于 NAT 穿透） -->
+  <X-PRE-PROCESS cmd="exec-set" data="ext_rtp_ip=echo ${EXT_IP:-auto-nat}"/>
+  <X-PRE-PROCESS cmd="exec-set" data="ext_sip_ip=echo ${EXT_IP:-auto-nat}"/>
+
+  <section name="configuration" description="Configuration">
+    <X-PRE-PROCESS cmd="include" data="autoload_configs/*.xml"/>
+  </section>
+
+  <section name="dialplan" description="Dialplan">
+    <X-PRE-PROCESS cmd="include" data="dialplan/*.xml"/>
+  </section>
+
+  <section name="directory" description="User Directory">
+    <X-PRE-PROCESS cmd="include" data="directory/*.xml"/>
+  </section>
+
+</document>

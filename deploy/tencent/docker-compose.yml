@@ -1,0 +1,95 @@
+# Clarion 腾讯云部署
+#
+# 用法：
+#   cd /opt/clarion
+#   podman-compose up -d           # 启动所有服务
+#   podman-compose logs -f worker  # 查看 Worker 日志
+#   podman-compose down            # 停止
+
+services:
+  pg:
+    image: docker.io/library/postgres:17-alpine
+    environment:
+      POSTGRES_USER: clarion
+      POSTGRES_PASSWORD: clarion
+      POSTGRES_DB: clarion
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./migrations/001_initial_schema.up.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clarion"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: docker.io/library/redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  fs:
+    image: docker.io/drachtio/drachtio-freeswitch-mrf:latest
+    # 使用 host 网络模式：SIP/RTP 必须用 UDP，host 模式最简单可靠
+    network_mode: host
+    volumes:
+      - ./freeswitch/conf/freeswitch.xml:/usr/local/freeswitch/conf/freeswitch.xml
+      - ./freeswitch/conf/autoload_configs:/usr/local/freeswitch/conf/autoload_configs
+      - ./freeswitch/conf/sip_profiles:/usr/local/freeswitch/conf/sip_profiles
+      - ./freeswitch/conf/dialplan:/usr/local/freeswitch/conf/dialplan
+      - ./freeswitch/conf/directory:/usr/local/freeswitch/conf/directory
+      - /tmp/clarion-audio:/tmp/clarion-audio
+    environment:
+      EXT_IP: "82.156.218.133"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  clarion:
+    image: docker.io/library/debian:bookworm-slim
+    network_mode: host
+    volumes:
+      - ./bin/clarion:/usr/local/bin/clarion:ro
+      - ./clarion.toml:/etc/clarion/clarion.toml:ro
+      - /etc/pki/tls/certs/ca-bundle.crt:/etc/ssl/certs/ca-certificates.crt:ro
+    env_file:
+      - .env
+    command: ["clarion", "-c", "/etc/clarion/clarion.toml", "serve"]
+    depends_on:
+      pg:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    image: docker.io/library/debian:bookworm-slim
+    network_mode: host
+    volumes:
+      - ./bin/clarion-worker:/usr/local/bin/clarion-worker:ro
+      - ./clarion.toml:/etc/clarion/clarion.toml:ro
+      - /tmp/clarion-audio:/tmp/clarion-audio
+      - /etc/pki/tls/certs/ca-bundle.crt:/etc/ssl/certs/ca-certificates.crt:ro
+    env_file:
+      - .env
+    command: ["clarion-worker", "-c", "/etc/clarion/clarion.toml"]
+    depends_on:
+      pg:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      fs:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  pg_data:
