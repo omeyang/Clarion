@@ -1,0 +1,111 @@
+version: '3'
+
+vars:
+  GO_PKGS: ./cmd/... ./internal/...
+
+tasks:
+  default:
+    desc: Build all binaries
+    deps: [build]
+
+  build:
+    desc: Build all binaries
+    cmds:
+      - go build -o bin/clarion ./cmd/clarion
+      - go build -o bin/clarion-worker ./cmd/worker
+      - go build -o bin/clarion-postprocessor ./cmd/postprocessor
+
+  test:
+    desc: Run all tests with race detection and coverage
+    cmds:
+      - go test -race -count=1 -coverprofile=coverage.out {{.GO_PKGS}}
+      - go tool cover -func=coverage.out
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run {{.GO_PKGS}}
+
+  integration-test:
+    desc: Run integration tests against real APIs
+    dotenv: ['.env']
+    cmds:
+      - go test -tags=integration -run=Integration -v -count=1 -timeout=120s {{.GO_PKGS}}
+
+  integration-test-llm:
+    desc: Run LLM integration tests only
+    dotenv: ['.env']
+    cmds:
+      - go test -tags=integration -run=Integration -v -count=1 -timeout=60s ./internal/provider/llm/
+
+  integration-test-tts:
+    desc: Run TTS integration tests only
+    dotenv: ['.env']
+    cmds:
+      - go test -tags=integration -run=Integration -v -count=1 -timeout=60s ./internal/provider/tts/
+
+  integration-test-asr:
+    desc: Run ASR integration tests only
+    dotenv: ['.env']
+    cmds:
+      - go test -tags=integration -run=Integration -v -count=1 -timeout=60s ./internal/provider/asr/
+
+  integration-test-pipeline:
+    desc: Run full pipeline integration tests (LLM→TTS→ASR)
+    dotenv: ['.env']
+    cmds:
+      - go test -tags=integration -run=Integration -v -count=1 -timeout=120s ./internal/provider/
+
+  bench:
+    desc: Run benchmarks
+    cmds:
+      - go test -bench=. -benchmem ./internal/...
+
+  fmt:
+    desc: Format code
+    cmds:
+      - goimports -w .
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf bin/ coverage.out
+
+  gen-test-audio:
+    desc: 使用 TTS 生成测试音频文件
+    dotenv: ['.env']
+    cmds:
+      - go run ./cmd/audiotest -c deploy/local/clarion-local.toml gen-audio
+
+  pipeline-test:
+    desc: 端到端语音管道测试 (WAV → ASR → LLM → TTS → WAV)
+    dotenv: ['.env']
+    cmds:
+      - go run ./cmd/audiotest -c deploy/local/clarion-local.toml pipeline
+
+  local-up:
+    desc: 启动本地开发环境 (PG + Redis + FreeSWITCH)
+    dir: deploy/local
+    cmds:
+      - docker compose up -d
+
+  local-down:
+    desc: 停止本地开发环境
+    dir: deploy/local
+    cmds:
+      - docker compose down
+
+  schema-up:
+    desc: 应用数据库 schema 变更
+    cmds:
+      - migrate -database "$DATABASE_URL" -path schema up
+
+  schema-down:
+    desc: 回退数据库 schema 变更（1步）
+    cmds:
+      - migrate -database "$DATABASE_URL" -path schema down 1

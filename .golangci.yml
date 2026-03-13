@@ -1,0 +1,156 @@
+# Clarion golangci-lint 配置
+# 版本: golangci-lint v2.11+
+# 原则: 非测试代码禁止 nolint，测试代码非必要不得绕过
+# 修改此文件需经 code review 审批，不允许通过放松配置来绕过 lint 错误
+
+version: "2"
+
+linters:
+  enable:
+    # ── 正确性 ──────────────────────────────────────────
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+
+    # ── 错误处理 ────────────────────────────────────────
+    - nilerr
+    - errorlint
+    - wrapcheck
+
+    # ── Bug 预防 ────────────────────────────────────────
+    - bodyclose
+    - sqlclosecheck
+    - rowserrcheck
+    - noctx
+    - copyloopvar
+
+    # ── 代码质量 ────────────────────────────────────────
+    - revive
+    - goconst
+    - gocyclo
+    - funlen
+    - nestif
+    - unconvert
+    - unparam
+    - nakedret
+    - dupword
+
+    # ── 安全 ────────────────────────────────────────────
+    - gosec
+
+    # ── 风格一致性 ──────────────────────────────────────
+    - whitespace
+    - godot
+    - errname
+    - exhaustive
+
+    # ── nolint 管控 ─────────────────────────────────────
+    - nolintlint
+
+    # ── 性能 ────────────────────────────────────────────
+    - perfsprint
+    - intrange
+    - usestdlibvars
+
+  settings:
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+      allow-unused: false
+
+    errcheck:
+      check-type-assertions: true
+
+    errorlint:
+      errorf: true
+      asserts: true
+      comparison: true
+
+    gocyclo:
+      min-complexity: 15
+
+    funlen:
+      lines: 80
+      statements: 50
+      ignore-comments: true
+
+    nestif:
+      min-complexity: 4
+
+    nakedret:
+      max-func-lines: 10
+
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: var-declaration
+        - name: var-naming
+
+    gosec:
+      excludes:
+        - G104    # errcheck 已覆盖
+        - G108    # pprof 在 debug 模式下有意开放
+        - G115    # PCM 音频处理和 pgx 连接池中的整数转换是安全的
+        - G304    # 内部缓存路径读取是安全的
+
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+
+    exhaustive:
+      default-signifies-exhaustive: true
+
+  exclusions:
+    generated: strict
+    rules:
+      - path: _test\.go
+        linters:
+          - funlen
+          - gocyclo
+          - wrapcheck
+          - errcheck
+          - bodyclose
+          - goconst
+          - dupword
+
+      - path: cmd/
+        linters:
+          - funlen
+
+      - path: internal/api/
+        text: "var-naming.*package"
+        linters:
+          - revive
+
+    paths:
+      - web/node_modules
+      - third_party
+      - ".*\\.pb\\.go$"
+      - ".*_gen\\.go$"
+
+formatters:
+  enable:
+    - goimports
+
+severity:
+  default: error

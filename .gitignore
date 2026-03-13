@@ -1,0 +1,58 @@
+# ── Go 编译产物 ──────────────────────────────────────────────
+# 所有编译输出统一到 bin/ 目录（Taskfile build 目标）
+bin/
+coverage.out
+
+# ── 运行时配置（从 clarion.example.toml 复制） ───────────────
+clarion.toml
+!clarion.example.toml
+
+# ── IDE & editors ─────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.cursorignore
+.cursorindexingignore
+
+# ── Node / Frontend ──────────────────────────────────────────
+web/node_modules/
+web/dist/
+
+# ── Database ──────────────────────────────────────────────────
+*.sqlite*
+
+# ── Recordings & uploads (runtime artifacts) ─────────────────
+/recordings/
+
+# ── OS files ──────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Logs ──────────────────────────────────────────────────────
+*.log
+
+# ── 脚本运行产物 ──────────────────────────────────────────────
+scripts/.quality-baseline
+
+# ── Environment & secrets (NEVER commit) ─────────────────────
+.env
+.env.*
+!.env.example
+.envrc
+
+# ── 根目录编译产物 ─────────────────────────────────────────
+/audiotest
+/worker
+/omnitest
+/postprocessor
+
+# ── 测试产物 ──────────────────────────────────────────────────
+*.pcm
+
+# ── AI 工具 ──────────────────────────────────────────────────
+.ai-tmux/
+
+# ── 本地测试音频 ──────────────────────────────────────────────
+deploy/local/test-audio/

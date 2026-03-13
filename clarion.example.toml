@@ -1,0 +1,175 @@
+# clarion.toml — Clarion AI Outbound Voice Engine Configuration
+#
+# Env var override: CLARION_{SECTION}_{KEY}
+# Example: CLARION_LLM_API_KEY=sk-xxx
+
+[server]
+addr = ":8000"
+debug = false
+log_level = "info"    # debug | info | warn | error
+
+[database]
+dsn = "postgres://clarion:clarion@localhost:5432/clarion?sslmode=disable"
+max_open_conns = 20
+max_idle_conns = 5
+
+[redis]
+addr = "localhost:6379"
+password = ""
+db = 0
+task_queue_key = "clarion:task_queue"
+event_stream_key = "clarion:call_completed"
+session_prefix = "clarion:session"
+
+[asr]
+provider = "qwen"
+api_key = ""          # CLARION_ASR_API_KEY
+model = "qwen3-asr-flash-realtime"
+sample_rate = 16000
+
+[llm]
+provider = "deepseek"
+api_key = ""          # CLARION_LLM_API_KEY
+base_url = "https://api.deepseek.com"
+model = "deepseek-chat"
+max_tokens = 512
+temperature = 0.7
+timeout_ms = 5000
+
+[tts]
+provider = "dashscope"
+api_key = ""          # CLARION_TTS_API_KEY
+model = "cosyvoice-v3-flash"
+voice = "longanyang"
+sample_rate = 16000
+pool_size = 2         # WebSocket 连接池大小，0 禁用，推荐 2
+
+[freeswitch]
+esl_host = "127.0.0.1"
+esl_port = 8021
+esl_password = "ClueCon"
+audio_ws_addr = ":8765"
+
+[call_protection]
+max_duration_sec = 300
+max_silence_sec = 15
+ring_timeout_sec = 30
+first_silence_timeout_sec = 6
+max_asr_retries = 2
+max_consecutive_errors = 3
+max_turns = 20
+
+[amd]
+enabled = true
+detection_window_ms = 3000
+continuous_speech_threshold_ms = 4000
+human_pause_threshold_ms = 300
+energy_threshold_dbfs = -35.0
+
+[oss]
+enabled = false
+endpoint = ""
+bucket = "clarion-recordings"
+access_key_id = ""     # CLARION_OSS_ACCESS_KEY_ID
+access_key_secret = "" # CLARION_OSS_ACCESS_KEY_SECRET
+
+[worker]
+max_concurrent_calls = 5
+
+# ── 任务调度（Asynq）──────────────────────────────────────────
+
+[scheduler]
+queue = "outbound"            # Asynq 外呼任务队列名称
+
+[scheduler.retry]
+start_hour = 9                # 允许重试的每日起始小时（含）
+end_hour = 20                 # 允许重试的每日截止小时（不含）
+weekdays_only = true          # 是否仅在工作日重试
+min_interval_minutes = 120    # 同一号码两次呼叫最小间隔（分钟，防骚扰）
+
+# ── 成本预算控制 ──────────────────────────────────────────────
+
+[budget]
+enabled = false               # 是否启用预算控制
+max_tokens = 2000             # 整通电话 token 上限（输入+输出合计）
+max_turns = 20                # 最大对话轮次
+max_duration_sec = 300        # 最长通话时长（秒）
+degrade_threshold = 0.8       # 降级阈值（0-1），达到此比例后切换为模板回复
+
+# ── 离题检测与收束 ────────────────────────────────────────────
+
+[off_topic]
+enabled = false               # 是否启用离题检测
+converge_after = 2            # 连续离题达到此轮次后触发收束（拉回正题）
+end_after = 4                 # 连续离题达到此轮次后触发结束通话
+
+# ── 对话安全防护 ──────────────────────────────────────────────
+
+[guard]
+enabled = false               # 是否启用对话安全防护（输入过滤 + 输出校验）
+max_input_runes = 500         # 用户输入最大字符数，超出截断
+# extra_patterns = []         # 额外注入检测正则（叠加内置规则）
+max_response_runes = 100      # 单条 LLM 响应最大字符数，超出截断
+# extra_ai_patterns = []      # 额外 AI 身份泄露检测正则（叠加内置规则）
+# extra_leak_patterns = []    # 额外系统提示泄露检测正则（叠加内置规则）
+
+# ── 本地 ASR（sherpa-onnx Paraformer，启用后与云端 ASR 组成 RacingASR 竞速）──
+
+[local_asr]
+enabled = false               # 是否启用本地 ASR（RacingASR 竞速模式）
+encoder_path = ""             # Paraformer 编码器 ONNX 模型路径
+decoder_path = ""             # Paraformer 解码器 ONNX 模型路径
+tokens_path = ""              # tokens 文件路径
+num_threads = 1               # 推理线程数
+
+# ── 本地 TTS（sherpa-onnx VITS，启用后与云端 TTS 组成 TieredTTS 分层）──
+
+[local_tts]
+enabled = false               # 是否启用本地 TTS（TieredTTS 分层模式）
+model_path = ""               # VITS 模型 ONNX 文件路径
+tokens_path = ""              # tokens 文件路径
+data_dir = ""                 # 模型数据目录（如 espeak-ng-data）
+dict_dir = ""                 # 词典目录路径（可选）
+lexicon_path = ""             # 词典文件路径（可选）
+rule_fsts = ""                # 文本规范化 FST 路径（可选）
+rule_fars = ""                # 文本规范化 FAR 路径（可选）
+num_threads = 1               # 推理线程数
+speaker_id = 0                # 说话人 ID（多说话人模型）
+speed = 1.0                   # 语速倍率
+threshold = 10                # 文本字符数阈值，≤ 此值走本地，> 此值走云端
+
+# ── Silero VAD（ML 级语音活动检测，替代 WebRTC VAD）──────────────
+
+[silero_vad]
+enabled = false              # 是否启用 Silero VAD
+model_path = ""              # silero_vad.onnx 模型文件路径
+threshold = 0.5              # 语音检测概率阈值 (0, 1)，电话场景推荐 0.4-0.6
+min_silence_duration = 0.3   # 标记语音结束所需最小静默时长（秒），电话场景推荐 0.3
+min_speech_duration = 0.25   # 最短语音段时长（秒），更短的会被忽略
+sample_rate = 16000          # 音频采样率（Hz），Silero VAD 要求 16000
+
+# ── 管线模式 ──────────────────────────────────────────────────
+
+[pipeline]
+mode = "classic"      # "classic"（ASR→LLM→TTS 三段管线）| "hybrid"（Omni + Smart LLM）
+
+# ── 实时语音（hybrid 模式下使用）───────────────────────────────
+
+[realtime]
+provider = "omni"     # 实时语音提供者（目前仅支持 "omni"）
+api_key = ""          # CLARION_REALTIME_API_KEY
+model = "qwen3-omni-flash-realtime"
+voice = "Cherry"
+vad_enabled = true
+vad_threshold = 0.5
+silence_duration_ms = 500
+
+# ── 异步决策 LLM（hybrid 模式下使用）──────────────────────────
+
+[smart_llm]
+provider = "deepseek"
+api_key = ""          # CLARION_SMART_LLM_API_KEY（可复用 LLM 的 key）
+base_url = "https://api.deepseek.com"
+model = "deepseek-chat"
+max_tokens = 256
+temperature = 0.3
