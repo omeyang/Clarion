@@ -1,5 +1,11 @@
 flowchart LR
-    ASR_OUT["ASR 转写结果"] --> LLM_BOX
+    ASR_OUT["ASR 转写结果"] --> INPUT_FILTER
+
+    subgraph GUARD_IN["输入防护"]
+        INPUT_FILTER["InputFilter<br/>注入检测 + 长度截断"]
+    end
+
+    INPUT_FILTER --> LLM_BOX
 
     subgraph LLM_BOX["LLM 负责：理解与辅助生成"]
         I["意图识别"]
@@ -8,6 +14,16 @@ flowchart LR
         D["候选回复草稿"]
     end
 
+    subgraph GUARD_MID["输出防护链"]
+        DV["DecisionValidator<br/>意图/字段校验"]
+        OC["OutputChecker<br/>状态合法性校验"]
+        OT["OffTopicTracker<br/>离题检测"]
+    end
+
+    LLM_BOX --> DV
+    DV --> OC
+    OC --> OT
+
     subgraph RULE_BOX["规则引擎负责：业务决策"]
         CTX["当前状态 + 上下文"]
         SM["状态机：当前阶段"]
@@ -15,13 +31,24 @@ flowchart LR
         DEC["决策输出"]
     end
 
-    LLM_BOX -->|"判断参考"| RULE_BOX
+    OT -->|"校验后的<br/>结构化输出"| RULE_BOX
     CTX --> DEC
     SM --> DEC
     SC --> DEC
 
-    DEC --> REPLY["回复构建<br/>模板 + LLM草稿"]
-    REPLY --> TTS_OUT["流式 TTS"]
+    DEC --> REPLY["回复构建<br/>模板 / LLM草稿 / 预编译"]
 
-    NOTE1["边界：LLM输出是参考<br/>不是最终决策"]
-    NOTE2["边界：是否继续/转人工/结束<br/>必须由规则引擎输出"]
+    subgraph GUARD_OUT["回复防护"]
+        RV["ResponseValidator<br/>AI身份/提示泄露"]
+        CC["ContentChecker<br/>JSON/代码块/URL清洗"]
+    end
+
+    REPLY --> RV
+    RV --> CC
+    CC --> TTS_OUT["流式 TTS"]
+
+    subgraph BUDGET["预算控制"]
+        BG["CallBudget<br/>Token/轮次/时长"]
+    end
+
+    BG -.->|"BudgetEnd → 结束<br/>BudgetDegrade → 模板回复"| REPLY

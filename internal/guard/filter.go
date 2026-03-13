@@ -1,4 +1,3 @@
-// Package guard 提供输入清洗和输出校验，防止 prompt 注入和越权操作。
 package guard
 
 import (

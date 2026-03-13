@@ -5,13 +5,14 @@ sequenceDiagram
     participant FS as FreeSWITCH
     participant User as 被叫联系人
     participant ASR as 流式ASR
-    participant LLM as 流式LLM
+    participant LLM as LLM
+    participant Guard as Guard防护链
     participant Rule as 规则引擎
     participant TTS as 流式TTS
-    participant Q as Redis队列
+    participant Q as Redis Stream
     participant PP as Post-Processor
 
-    Task->>Q: 派发外呼任务（含模板快照ID）
+    Task->>Q: 派发外呼任务（Asynq，含模板快照ID）
     CW->>Q: 取任务
     CW->>FS: originate 呼叫
     FS->>User: 拨号
@@ -26,25 +27,46 @@ sequenceDiagram
         loop 实时对话循环
             User-->>FS: 用户语音
             FS-->>CW: 音频流（WebSocket）
+            CW->>CW: 播放填充音频（等待期间）
             CW->>ASR: 流式送入音频
-            ASR-->>CW: partial/final 结果
-            CW->>LLM: 理解意图+提取字段（流式）
-            LLM-->>CW: 流式token
-            CW->>Rule: 当前状态+字段+意图
-            Rule-->>CW: 决策（下一状态/回复策略）
-            CW->>TTS: 流式合成回复
+            ASR-->>CW: partial 结果
+            Note over CW,LLM: 可选：基于 partial ASR<br/>启动预推理（PrepareStream）
+            ASR-->>CW: final 结果
+            CW->>Guard: InputFilter 输入过滤
+            Guard-->>CW: 清洗后文本
+
+            alt 非流式模式（结构化输出）
+                CW->>LLM: callLLM（JSON模式）
+                LLM-->>CW: 结构化输出（intent/fields/reply）
+                CW->>Guard: validateDecision + validateOutput + checkOffTopic
+                Guard-->>CW: 校验后输出
+                CW->>Rule: Evaluate（LLMOutput + DialogueContext）
+                Rule-->>CW: Decision（状态/策略/回复）
+                CW->>Guard: validateResponse + cleanContent
+                Guard-->>CW: 安全回复文本
+                CW->>TTS: 合成回复
+            else 流式模式（自然文本）
+                CW->>LLM: GenerateStream（自然语言模式）
+                LLM-->>CW: 流式token
+                CW->>CW: streamTokensToSentences（两级分句）
+                CW->>Guard: 逐句 validateResponse + cleanContent
+                Guard-->>CW: 安全句段
+                CW->>TTS: 逐句流式合成
+            end
+
             TTS-->>FS: 流式音频播放
             Note over CW: 如用户打断→uuid_break→新一轮
         end
 
         FS-->>CW: 挂断事件
-        CW->>Q: 写入完成事件（含原始对话数据）
+        CW->>Q: 写入完成事件（Redis Stream）
     end
 
-    PP->>Q: 消费完成事件
+    PP->>Q: XReadGroup 消费完成事件
     PP->>LLM: 生成通话摘要
-    PP->>PP: 写入 PostgreSQL（结构化结果）
-    PP->>PP: 上传录音到 OSS
+    PP->>LLM: 提取商机信息
+    PP->>PP: 写入 PostgreSQL（calls/turns/events/opportunities）
     opt 需要人工跟进
-        PP->>PP: 推送企业微信通知
+        PP->>PP: 发送跟进通知
     end
+    PP->>Q: XAck 确认消费

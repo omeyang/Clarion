@@ -5,37 +5,40 @@ flowchart LR
 
     subgraph FS_NODE["FreeSWITCH"]
         SIP["SIP 呼叫控制"]
-        AF["mod_audio_fork<br/>WebSocket 音频推送"]
-        REC["录音模块<br/>mod_record"]
-        ESL["ESL 事件接口"]
+        AF["mod_audio_fork<br/>WebSocket 双向桥接"]
+        ESL["ESL TCP 接口<br/>readLoop 事件分发"]
     end
 
     subgraph CW_NODE["Call Worker 进程"]
-        WS["WebSocket<br/>音频接收/发送"]
-        RESAMPLE["重采样<br/>8kHz↔16kHz"]
-        PIPELINE["流式管道<br/>VAD→ASR→LLM→TTS"]
-        MSM["媒体状态机"]
-        BSM["业务状态机"]
+        WS["WebSocket Server<br/>handleAudioWS"]
+        LINK["audioLink<br/>in chan (128)<br/>out chan (128)"]
+        RESAMPLE["重采样<br/>8kHz↔16kHz<br/>预分配缓冲"]
+
+        subgraph SESSION["Session eventLoop"]
+            AUDIO["handleAudioFrame<br/>状态分发"]
+            PIPELINE["流式管道<br/>ASR→LLM→TTS"]
+            MSM["Media FSM<br/>PhoneTransitions<br/>Unsynced()"]
+        end
     end
 
     subgraph AI["AI Provider"]
-        ASR["流式 ASR"]
-        LLM["流式 LLM"]
-        TTS["流式 TTS"]
+        ASR["流式 ASR<br/>16kHz PCM"]
+        LLM["流式 LLM<br/>SSE"]
+        TTS["流式 TTS<br/>逐句合成"]
     end
 
-    User <-->|"语音通话"| SIP
+    User <-->|"语音通话<br/>G.711"| SIP
     SIP --> AF
-    AF -->|"用户音频流<br/>8kHz PCMU"| WS
-    WS -->|"AI音频流<br/>8kHz PCM"| AF
+    AF -->|"用户音频<br/>8kHz PCM"| WS
+    WS -->|"AI 音频<br/>8kHz PCM"| AF
     AF --> SIP
 
-    WS --> RESAMPLE
-    RESAMPLE --> PIPELINE
+    WS <--> LINK
+    LINK --> RESAMPLE
+    RESAMPLE --> AUDIO
+    AUDIO --> PIPELINE
     PIPELINE --> ASR
     PIPELINE --> LLM
     PIPELINE --> TTS
 
-    ESL <-->|"事件/命令<br/>接通/挂断/uuid_break"| MSM
-
-    SIP --> REC
+    ESL <-->|"ESL 事件/命令<br/>CHANNEL_ANSWER<br/>CHANNEL_HANGUP<br/>uuid_break/kill"| MSM

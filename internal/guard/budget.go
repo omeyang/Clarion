@@ -1,4 +1,6 @@
-// Package guard 实现对话安全防护，包括输入过滤、输出校验和成本预算控制。
+// Package guard 提供对话安全防护：输入清洗（防 prompt 注入）、
+// 输出校验（决策/回复/内容合规）、预算控制（Token/时间）、
+// 离题检测和内容过滤。
 package guard
 
 import (

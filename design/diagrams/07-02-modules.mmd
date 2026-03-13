@@ -1,51 +1,78 @@
 flowchart TB
-    subgraph MGMT["HTTP 管理面"]
-        TS["task_service<br/>任务调度"]
-        SS["scenario_service<br/>模板管理"]
-        AA["admin_api<br/>后台查询"]
-        ES["export_service<br/>导出"]
+    subgraph MGMT["API Server（bin/clarion）"]
+        R["api/router.go<br/>HTTP 路由"]
+        H["api/handler/<br/>请求处理"]
+        S["api/schema/<br/>请求/响应 Schema"]
+        MW["api/middleware.go<br/>日志 / Recovery"]
+        SVC["service/<br/>业务逻辑"]
+        ST["store/<br/>数据访问（pgx/v5）"]
     end
 
-    subgraph CW["Call Worker 通话面"]
-        CS["call_service<br/>外呼控制"]
-        MSM["media_state_machine<br/>媒体状态机"]
-        SP["streaming_pipeline<br/>流式管道"]
-        DE["dialogue_engine<br/>业务状态机"]
-        RE["rule_engine<br/>规则判断"]
-        SESS["session_service<br/>会话管理"]
-        AC["admission_controller<br/>准入控制"]
+    subgraph CW["Call Worker（bin/clarion-worker）"]
+        WK["call/worker.go<br/>Asynq Handler / WS Server"]
+        SESS["call/session.go<br/>Session 编排"]
+        ESL["call/esl/<br/>FreeSWITCH ESL"]
+        AMD["call/amd/<br/>应答机检测"]
+        MFSM["engine/media/fsm.go<br/>Media FSM"]
+        DENG["engine/dialogue/<br/>Dialogue FSM"]
+        RENG["engine/rules/<br/>规则引擎"]
+        GD["guard/<br/>安全防护链<br/>预算/校验/安全/跑题"]
+        RS["resilience/<br/>熔断/重试/降级"]
+        PC["precompile/<br/>预编译"]
+        OB["observe/<br/>可观测性"]
     end
 
-    subgraph POST["Post-Processing Worker"]
-        SUM["summary_service<br/>摘要生成"]
-        RES["result_service<br/>结果落库"]
-        STO["storage_service<br/>录音上传"]
-        NOT["notification_service<br/>通知推送"]
-        CLS["classifier_service<br/>分级"]
+    subgraph POST["Post-Processor（bin/clarion-postprocessor）"]
+        PW["postprocess/worker.go<br/>Redis Stream 消费"]
+        SM["postprocess/summary.go<br/>LLM 摘要"]
+        OP["postprocess/opportunity.go<br/>商机提取"]
+        WR["postprocess/writer.go<br/>PostgreSQL 写入"]
+        NT["notify/<br/>企业微信通知"]
     end
 
-    subgraph AI["AI Provider（流式）"]
-        ASR["asr_provider"]
-        LLM["llm_provider"]
-        TTS["tts_provider"]
+    subgraph PROV["Provider 实现"]
+        QASR["provider/asr/qwen.go<br/>通义听悟 ASR"]
+        DLM["provider/llm/deepseek.go<br/>DeepSeek LLM"]
+        DTTS["provider/tts/dashscope.go<br/>DashScope CosyVoice"]
+        POOL["provider/tts/pool.go<br/>WS 连接池"]
+        OMNI["provider/realtime/omni.go<br/>Qwen3-Omni-Realtime"]
+        STRT["provider/strategy/smart.go<br/>Smart Strategy"]
     end
 
-    subgraph DOM["领域适配"]
-        SCH["extraction_schema"]
-        PRM["prompt_templates"]
-        GRD["grading_rules"]
-        ACT["next_actions"]
+    subgraph SONATA["Sonata 核心库"]
+        ESESS["engine/session.go"]
+        ETRANS["engine/transport.go"]
+        AIFACE["engine/aiface/<br/>ASR/LLM/TTS 接口"]
+        EPCM["engine/pcm/<br/>音频处理"]
+        SASR["sherpa/asr.go<br/>Paraformer"]
+        STTS["sherpa/tts.go<br/>VITS"]
+        SVAD["sherpa/vad.go<br/>Silero VAD"]
+        SRACE["sherpa/raceasr.go<br/>RacingASR"]
+        STIER["sherpa/tieredtts.go<br/>TieredTTS"]
+        SSPK["sherpa/speaker.go<br/>说话人嵌入"]
     end
 
-    TS --> CS
-    CS --> MSM
-    MSM --> SP
-    SP --> DE
-    DE --> RE
-    SP --> ASR
-    SP --> LLM
-    SP --> TTS
-    DE --> DOM
-    RE --> DOM
-    CLS --> DOM
-    NOT --> WeCom["企业微信"]
+    R --> H
+    H --> SVC
+    SVC --> ST
+
+    WK --> SESS
+    SESS --> ESL
+    SESS --> MFSM
+    SESS --> DENG
+    DENG --> RENG
+    SESS --> QASR
+    SESS --> DLM
+    SESS --> DTTS
+    SESS --> GD
+    SESS --> RS
+
+    PW --> SM
+    PW --> OP
+    PW --> WR
+    PW --> NT
+
+    QASR --> AIFACE
+    DLM --> AIFACE
+    DTTS --> AIFACE
+    DTTS --> POOL

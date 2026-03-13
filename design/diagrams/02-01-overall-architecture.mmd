@@ -1,49 +1,46 @@
 flowchart TB
     subgraph L1["1. 用户交互层"]
-        Admin["管理后台<br/>上传名单 / 创建任务<br/>查看结果 / 录音 / 摘要"]
+        Admin["管理后台（未来 Web UI）<br/>任务管理 / 联系人管理<br/>模板管理 / 通话查询"]
         WeCom["企业微信通知<br/>高优联系人推送<br/>任务结果 / 异常提醒"]
     end
 
-    subgraph L2["2. 领域配置与业务编排层"]
-        API["HTTP 管理面<br/>任务CRUD / 模板管理<br/>结果查询 / 名单导入"]
-        Domain["领域适配组件<br/>场景模板 / 状态机配置<br/>字段Schema / 分级规则<br/>话术模板"]
+    subgraph L2["2. 业务编排层"]
+        API["Go HTTP API Server<br/>net/http 标准库路由<br/>handler → service → store"]
     end
 
     subgraph L3["3. 实时会话运行时"]
-        CW["Call Worker 进程<br/>通话生命周期管理<br/>流式管道编排<br/>媒体状态机"]
-        PP["Post-Processing Worker<br/>摘要生成 / 结果落库<br/>录音上传 / 通知推送"]
+        CW["Call Worker 进程<br/>Asynq 任务消费<br/>Session 编排 / 双状态机<br/>WebSocket 音频服务"]
+        PP["Post-Processor 进程<br/>Redis Stream XReadGroup<br/>摘要 / 商机提取 / 落库 / 通知"]
     end
 
     subgraph L4["4. 通信控制层"]
-        FS["FreeSWITCH<br/>外呼发起 / SIP管理<br/>音频输入输出<br/>录音控制 / 会话事件"]
+        FS["FreeSWITCH<br/>ESL 控制 / SIP 管理<br/>mod_audio_fork 音频流<br/>录音 / 会话事件"]
         Callee["被叫联系人"]
     end
 
-    subgraph L5["5. AI 能力层（流式接口）"]
-        ASR["ASR Provider<br/>MVP: 阿里云实时ASR<br/>备选: FunASR"]
-        LLM["LLM Provider<br/>DeepSeek（流式SSE）"]
-        TTS["TTS Provider<br/>MVP: 阿里云流式TTS<br/>备选: CosyVoice"]
+    subgraph L5["5. AI 能力层（Go 接口 aiface）"]
+        ASR["ASR Provider<br/>云端: 通义听悟 Qwen ASR<br/>本地: sherpa-onnx Paraformer<br/>混合: RacingASR 竞速"]
+        LLM["LLM Provider<br/>DeepSeek（SSE 流式）"]
+        TTS["TTS Provider<br/>云端: DashScope CosyVoice<br/>本地: sherpa-onnx VITS<br/>混合: TieredTTS 分层"]
+        RT["Realtime Provider<br/>Qwen3-Omni-Flash-Realtime<br/>（混合管线模式）"]
     end
 
     subgraph L6["6. 数据存储层"]
-        PG["PostgreSQL<br/>联系人/任务/通话/模板/事件"]
-        Redis["Redis<br/>会话状态/队列/锁/限流"]
-        OSS["对象存储<br/>录音/导出文件"]
+        PG["PostgreSQL（pgx/v5）<br/>联系人 / 任务 / 通话 / 模板"]
+        Redis["Redis（go-redis/v9）<br/>Asynq 队列 / Stream 事件<br/>会话快照 / 分布式锁"]
     end
 
     Admin --> API
-    WeCom <--> API
-    Domain <--> API
-    API -->|"外呼任务队列"| Redis
-    CW -->|"取任务"| Redis
-    CW <--> FS
+    WeCom <--> PP
+    API -->|"Asynq 任务派发"| Redis
+    CW -->|"Asynq 消费任务"| Redis
+    CW <-->|"ESL + WebSocket"| FS
     FS <--> Callee
     CW --> ASR
     CW --> LLM
     CW --> TTS
-    CW -->|"通话完成事件"| Redis
-    PP -->|"消费事件"| Redis
+    CW -.->|"混合模式"| RT
+    CW -->|"Redis Stream XADD"| Redis
+    PP -->|"XReadGroup 消费"| Redis
     PP --> PG
-    PP --> OSS
-    PP --> WeCom
     API <--> PG

@@ -1,33 +1,53 @@
 flowchart TB
-    REDIS["Redis 任务队列"]
-    REDIS -->|"取外呼任务"| CW
+    ASYNQ["Asynq 任务服务器<br/>TaskTypeOutboundCall<br/>Concurrency = MaxConcurrentCalls"]
+    ASYNQ -->|"HandleOutboundCall"| CW
 
     subgraph CW["Call Worker 进程"]
         direction TB
-        ESL_CONN["ESL 连接<br/>发起外呼 / 接收事件"]
-        WS_CONN["WebSocket 连接<br/>音频收发"]
+        ESL_CONN["ESLClient<br/>TCP 连接 + readLoop<br/>originate / uuid_break / uuid_kill"]
+        WS_CONN["WebSocket Server<br/>handleAudioWS<br/>audioLink 双向通道"]
 
-        subgraph MEDIA["媒体层"]
-            RESAMPLE["音频重采样"]
-            VAD_MOD["VAD 检测"]
-            ECHO["回声抑制标记"]
+        subgraph SESSION["Session (per call)"]
+            direction TB
+
+            subgraph MEDIA["媒体层"]
+                RESAMPLE["音频重采样<br/>8kHz↔16kHz<br/>预分配缓冲"]
+                VAD_MOD["SpeechDetector<br/>WebRTC/Silero/能量回退"]
+                AMD["AMDDetector<br/>能量+时序分析"]
+                NETQ["NetworkQuality<br/>抖动/间隙/低音量"]
+            end
+
+            subgraph STREAM["流式管道"]
+                S_ASR["流式 ASR"]
+                S_LLM["DialogueEngine<br/>ProcessStream"]
+                S_TTS["流式 TTS<br/>逐句合成"]
+                FILLER["填充词<br/>预合成 PCM 轮询"]
+                SPEC["预推理<br/>partial ASR 稳定触发"]
+            end
+
+            subgraph HYBRID["混合模式 (可选)"]
+                REALTIME["Qwen3-Omni-Flash<br/>Realtime 实时语音"]
+                STRATEGY["Strategy LLM<br/>异步业务决策"]
+            end
+
+            MSM["Media FSM<br/>PhoneTransitions<br/>Unsynced() O(1)"]
+            DLG["Dialogue FSM<br/>Opening→Qualification<br/>→...→Closing"]
+
+            subgraph GUARD["安全防护 (guard)"]
+                INPUT_FILTER["InputFilter<br/>注入攻击检测"]
+                BUDGET["CallBudget<br/>Token/时间预算"]
+                VALIDATOR["DecisionValidator<br/>决策格式校验"]
+            end
+
+            BREAKER["resilience.Breaker<br/>ASR 熔断器"]
         end
 
-        subgraph STREAM["流式管道"]
-            S_ASR["流式 ASR"]
-            S_LLM["流式 LLM"]
-            S_TTS["流式 TTS"]
-            CACHE["预合成音频缓存"]
-        end
-
-        MSM["媒体状态机<br/>BOT_SPEAKING<br/>WAITING_USER<br/>USER_SPEAKING<br/>PROCESSING<br/>BARGE_IN"]
-        BSM["业务状态机<br/>Opening<br/>Qualification<br/>InformationGathering<br/>..."]
-
-        PROTECT["通话保护<br/>超时/降级/最大时长"]
+        SNAPSHOT["SnapshotStore<br/>Redis 会话快照<br/>意外中断保存/恢复"]
+        SCHED["Scheduler Client<br/>入队恢复任务"]
     end
 
-    CW -->|"通话完成事件<br/>原始对话数据"| REDIS2["Redis 事件流"]
-    REDIS2 --> PP["Post-Processing<br/>Worker"]
+    CW -->|"SessionResult<br/>JSON"| STREAM_OUT["Redis Stream<br/>通话完成事件"]
+    STREAM_OUT --> PP["Post-Processing<br/>Worker"]
 
     ESL_CONN <--> FS["FreeSWITCH"]
     WS_CONN <--> FS

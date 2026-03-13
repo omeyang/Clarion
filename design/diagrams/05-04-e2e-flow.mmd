@@ -19,11 +19,11 @@ flowchart TB
     end
 
     subgraph COLD["冷路径：异步后处理"]
-        PP1["摘要生成"]
-        PP2["结果写入 PostgreSQL"]
-        PP3["录音上传 OSS"]
-        PP4{"分级结果"}
-        PP4 -- 需人工跟进 --> PP5["企业微信通知"]
+        PP1["摘要生成<br/>（Summarizer）"]
+        PP1 --> PP1B["商机提取<br/>（OpportunityExtractor）"]
+        PP1B --> PP2["结果写入 PostgreSQL<br/>calls / turns / events / opportunities"]
+        PP2 --> PP4{"分级结果"}
+        PP4 -- 需人工跟进 --> PP5["发送跟进通知"]
         PP4 -- 无需跟进 --> PP6["流程结束"]
     end
 

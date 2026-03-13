@@ -2,560 +2,441 @@
 
 ---
 
-## 1. 对话引擎设计原则
+## 1. 双状态机设计
 
-### 1.1 核心架构：状态机 + 规则控制 + LLM 辅助生成
+系统中运行着两个独立的状态机，各司其职，通过 Session 协调：
 
-对话引擎采用 **"状态机驱动 + 规则引擎决策 + LLM 辅助"** 的混合架构，而非完全
-依赖 LLM 的自由对话模式。
+| 状态机 | 关注点 | 实现位置 |
+|--------|--------|----------|
+| **媒体 FSM** | 何时说（交互节奏） | `Sonata/engine/mediafsm`（Sonata 核心库） |
+| **对话 FSM** | 说什么（对话内容） | `internal/engine/dialogue/fsm.go` |
 
-```
-用户语音 → ASR → LLM（理解/辅助） → 规则引擎（决策） → TTS → 播放
-                                          ↑
-                                     业务状态机
-```
+![双状态机关系](./diagrams/05-02-dual-state-machines.mmd)
 
-### 1.2 为什么不采用完全自由对话
+### 1.1 媒体 FSM
 
-| 问题 | 说明 |
+媒体 FSM 定义在 Sonata 核心库中，Clarion 通过类型别名引用（`internal/engine/types.go`）。状态包括：
+
+| 状态 | 说明 |
 |------|------|
-| **可控性差** | LLM 可能生成不符合业务要求的回复，无法保证合规话术 |
-| **调试困难** | 纯 LLM 对话的黑盒性质使得问题定位极其困难 |
-| **容易跑偏** | 用户闲聊或故意引导时，LLM 可能偏离业务目标 |
-| **一致性不足** | 相同场景下 LLM 回复不稳定，影响业务指标衡量 |
-| **成本与延迟** | 每轮都调用 LLM 增加延迟和 token 消耗 |
-| **安全风险** | LLM 可能泄露不该说的信息或做出不当承诺 |
+| `Idle` | 空闲 |
+| `Dialing` | 拨号中 |
+| `Ringing` | 振铃中 |
+| `AMDDetecting` | 答录机检测 |
+| `BotSpeaking` | 机器人播放语音 |
+| `WaitingUser` | 等待用户说话 |
+| `UserSpeaking` | 用户说话中（VAD 检测到语音活动） |
+| `Processing` | 处理中（ASR→LLM→规则→TTS） |
+| `BargeIn` | 用户打断 |
+| `SilenceTimeout` | 静默超时 |
+| `Hangup` | 挂断 |
+| `PostProcessing` | 异步后处理 |
 
-### 1.3 混合架构的优势
+媒体 FSM 由事件驱动（`EvDial`、`EvAnswer`、`EvSpeechStart`、`EvBargeIn` 等），每个事件触发确定性的状态转换。
 
-- **可控**：关键决策（是否继续、是否转人工、分级）由规则引擎输出，确定性可审计
-- **灵活**：LLM 处理开放性理解任务（意图识别、异议理解），兼顾自然度
-- **可调试**：每一步决策有明确的输入/输出，可追溯
-- **可演进**：规则引擎和 LLM 各自独立迭代，互不影响
+### 1.2 对话 FSM
 
----
+对话 FSM 与媒体 FSM 完全不同——它不是事件驱动，而是 **条件驱动**。每次推进时，FSM 遍历当前状态的所有 `TransitionRule`，找到第一个条件匹配的规则并执行转换。
 
-## 2. 业务状态机
-
-### 2.1 状态总览
-
-![业务状态机](./images/05-01-business-state-machine.png)
-
-业务状态机定义了一通外呼电话中对话推进的各个阶段。每个状态有明确的职责和
-退出条件。
-
-### 2.2 状态定义
-
-#### Opening（开场）
-
-- **职责**：表明身份，确认是否方便沟通
-- **进入条件**：通话接通且 AMD 检测为真人
-- **退出条件**：
-  - 用户愿意继续 → `Qualification`
-  - 用户拒绝或表示不方便 → `Closing`
-- **话术要点**：简洁明了，不超过 15 秒
-
-#### Qualification（资质判断）
-
-- **职责**：判断是否值得继续沟通，获取关键字段，判断是否属于目标人群
-- **进入条件**：用户在 Opening 阶段表示愿意继续
-- **退出条件**：
-  - 属于目标人群且关键字段缺失 → `InformationGathering`
-  - 可直接推进下一步 → `NextAction`
-  - 出现异议 → `ObjectionHandling`
-  - 非目标人群 → `Closing`
-- **关键判断**：根据场景模板定义的目标人群条件进行匹配
-
-#### InformationGathering（信息收集）
-
-- **职责**：补全缺失字段，提高人工接手效率
-- **进入条件**：Qualification 确认为目标人群但信息不完整
-- **退出条件**：
-  - 仍有缺失字段 → 自循环 `InformationGathering`
-  - 信息已足够 → `NextAction`
-  - 出现异议 → `ObjectionHandling`
-  - 明确拒绝 → `Closing`
-- **策略**：按优先级逐个追问，不要一次问多个问题
-
-#### ObjectionHandling（异议处理）
-
-- **职责**：处理"没兴趣"、"没空"、"不需要"等异议，判断是否还有继续必要
-- **进入条件**：任意阶段检测到用户异议
-- **退出条件**：
-  - 化解异议但仍需补充字段 → `InformationGathering`
-  - 化解异议且可推进 → `NextAction`
-  - 高价值线索需人工介入 → `MarkForFollowup`
-  - 明确拒绝 → `Closing`
-- **策略**：最多尝试化解 2 次，超过则不再坚持
-
-#### NextAction（引导下一步）
-
-- **职责**：引导下一步动作——加微信、预约回访、约时间等
-- **进入条件**：信息收集完成或 Qualification 直接推进
-- **退出条件**：
-  - 需人工跟进 → `MarkForFollowup`
-  - 本轮结束 → `Closing`
-- **话术要点**：给出明确的下一步行动指引
-
-#### MarkForFollowup（标记人工跟进）
-
-- **职责**：标记需要人工跟进，触发异步通知与落库
-- **进入条件**：高价值线索需人工介入，或 NextAction 中确定需后续跟进
-- **退出条件**：通知已触发 → `Closing`
-
-> **重要说明（关于"转人工"的语义更新）：**
->
-> 当前阶段的"转人工"是 **异步跟进**（企业微信通知 / 待办），**不是通话中实时转接**。
->
-> - 状态命名为 `MarkForFollowup`，明确表示"标记跟进"而非"实时转接"
-> - 话术中 **不能** 说"我帮您转接顾问"，**应该** 说"我会让顾问稍后联系您"
-> - 系统行为：挂断后通过企业微信推送通知给对应顾问，附带通话摘要和已收集信息
-> - 后续演进：如需实时转接能力，FreeSWITCH 支持 `uuid_bridge` 命令，
->   可在后续版本中扩展
-
-#### Closing（结束）
-
-- **职责**：结束对话，收口并记录结果
-- **进入条件**：各状态的终止条件
-- **退出条件**：对话结束
-- **话术要点**：礼貌收尾，确认关键信息
-
-### 2.3 状态转移规则
-
-状态转移由规则引擎决定，基于以下输入：
-
-| 输入 | 来源 |
-|------|------|
-| 当前业务状态 | 状态机上下文 |
-| LLM 输出的意图标签 | LLM structured output |
-| LLM 提取的字段 | LLM structured output |
-| 场景模板定义的必填字段 | 运行时快照 |
-| 已收集字段集合 | 会话上下文 |
-| 异议处理次数 | 会话上下文 |
-
-规则引擎根据这些输入，确定性地输出下一状态和对应动作。
-
----
-
-## 3. 业务状态机与媒体状态机的关系
-
-### 3.1 双层状态机并行运行
-
-系统中存在两层状态机，各司其职、并行运行：
-
-| 状态机 | 关注点 | 管什么 |
-|--------|--------|--------|
-| **媒体状态机** | 语音交互节奏 | 什么时候听、什么时候说、什么时候停 |
-| **业务状态机** | 对话内容 | 说什么、问什么、做什么决策 |
-
-![双状态机关系](./images/05-02-dual-state-machines.png)
-
-### 3.2 媒体状态机概览
-
-媒体状态机的状态包括：
-
-- **BOT_SPEAKING**：机器人正在播放语音
-- **WAITING_USER**：等待用户开始说话
-- **USER_SPEAKING**：用户正在说话，VAD 检测到语音活动
-- **PROCESSING**：用户说完，系统正在处理（ASR→LLM→规则→TTS）
-- **BARGE_IN**：用户打断了机器人播放
-- **SILENCE_TIMEOUT**：等待用户超时
-
-### 3.3 关键交互规则
-
-1. **业务状态机只在 PROCESSING 媒体状态时被驱动**
-   - 当媒体状态机进入 PROCESSING 状态时，才将 ASR 结果送入 LLM + 规则引擎
-   - 业务状态机产出回复内容和下一业务状态
-   - 回复内容交给 TTS，媒体状态机切换到 BOT_SPEAKING
-
-2. **挂断直接跳转 POST_PROCESSING**
-   - 媒体状态机在 **任意时刻** 检测到挂断（FreeSWITCH CHANNEL_HANGUP 事件）
-   - 直接跳转到 POST_PROCESSING，**不需要经过业务状态机**
-   - POST_PROCESSING 负责异步后处理：摘要生成、结果写入、录音上传等
-
-3. **打断（Barge-in）处理**
-   - BOT_SPEAKING 状态下 VAD 检测到用户说话
-   - 媒体状态机跳转到 BARGE_IN → 执行 `uuid_break` 停止播放
-   - 随后进入 USER_SPEAKING，开始新一轮 ASR 收集
-
-4. **静默超时处理**
-   - WAITING_USER 超过阈值（如 5 秒）仍无语音
-   - 媒体状态机跳转 SILENCE_TIMEOUT
-   - 触发提示话术（"您好，请问还在吗？"），然后回到 BOT_SPEAKING
-
-### 3.4 两层状态机协作示意
+### 1.3 两层状态机协作
 
 ```
 时间线 →
 
 媒体状态:  BOT_SPEAKING → WAITING → USER_SPEAKING → PROCESSING → BOT_SPEAKING → ...
                                                          ↓
-业务状态:                                        [Opening] → [Qualification] → ...
+对话状态:                                        [Opening] → [Qualification] → ...
                                                          ↑
                                                   规则引擎决策
 ```
 
----
-
-## 4. LLM 与规则引擎的职责边界
-
-### 4.1 职责划分
-
-![LLM与规则引擎边界](./images/05-03-llm-rule-boundary.png)
-
-#### LLM 负责（理解与辅助生成）
-
-| 职责 | 说明 |
-|------|------|
-| **意图识别** | 识别用户话语的意图标签（如：愿意继续、拒绝、询问详情、表达异议等） |
-| **字段提取** | 从用户话语中提取结构化字段（如：姓名、年龄、预算、时间偏好等） |
-| **异议识别** | 识别异议类型（没兴趣、没时间、价格贵、已有方案等） |
-| **候选回复草稿** | 基于上下文生成候选回复文本，供规则引擎选择或修正 |
-| **摘要初稿** | 通话结束后生成通话摘要的初稿 |
-
-#### 规则引擎负责（业务决策）
-
-| 职责 | 说明 |
-|------|------|
-| **是否继续对话** | 根据当前状态和意图判断是否继续 |
-| **缺什么字段** | 对比场景模板的必填字段与已收集字段 |
-| **该进哪个状态** | 根据状态转移规则确定下一业务状态 |
-| **是否标记跟进** | 根据线索价值和对话情况判断 |
-| **是否结束** | 判断对话是否应该结束 |
-| **等级判定** | 根据分级规则输出 A/B/C/D/X 等级 |
-| **下一步动作** | 确定具体的下一步行动（加微信、预约等） |
-| **回复策略** | 选择模板回复、LLM 草稿，或两者组合 |
-
-### 4.2 边界原则
-
-> **核心原则：LLM 的输出是"参考"，不是"最终决策"。**
-
-1. **LLM 不做业务决策**
-   - LLM 输出意图标签和字段，但"是否继续"、"转哪个状态"由规则引擎决定
-   - 即使 LLM 认为应该结束对话，规则引擎可以根据业务规则覆盖
-
-2. **规则引擎不做自然语言理解**
-   - 规则引擎不直接处理 ASR 文本，依赖 LLM 的结构化输出
-   - 规则引擎的输入是结构化的（意图标签、字段键值对）
-
-3. **回复生成是协作的**
-   - 规则引擎决定"回复策略"（用模板、用 LLM 草稿、还是组合）
-   - 简单场景直接用模板，复杂场景用 LLM 草稿并由规则引擎做安全检查
-
-4. **关键节点必须规则化**
-   - 以下决策 **必须** 由规则引擎输出，不允许 LLM 自行决定：
-     - 是否继续对话
-     - 是否标记人工跟进
-     - 是否结束通话
-     - 分级结果
-     - 合规性检查（不能承诺、不能泄露价格等）
-
-### 4.3 LLM 输入/输出格式
-
-LLM 使用 structured output（JSON mode）保证输出格式可解析：
-
-**输入：**
-
-```json
-{
-  "system_prompt": "场景相关的系统提示词",
-  "context": {
-    "current_state": "Qualification",
-    "collected_fields": {"name": "张先生"},
-    "required_fields": ["name", "age", "budget"],
-    "turn_count": 2
-  },
-  "recent_turns": [
-    {"role": "bot", "text": "请问您今年多大年纪？"},
-    {"role": "user", "text": "我35岁，但是我现在没什么兴趣"}
-  ]
-}
-```
-
-**输出：**
-
-```json
-{
-  "intent": "objection_no_interest",
-  "extracted_fields": {"age": "35"},
-  "objection_type": "no_interest",
-  "suggested_reply": "理解您的想法，很多客户一开始也是这样觉得的...",
-  "confidence": 0.85
-}
-```
+关键规则：
+- **对话 FSM 只在 PROCESSING 媒体状态时被驱动**——媒体 FSM 进入 Processing 状态后，ASR 结果送入对话引擎处理
+- **挂断直接跳转 PostProcessing**——媒体 FSM 在任意时刻检测到挂断，直接进入后处理，不经过对话 FSM
+- **打断（Barge-in）由媒体 FSM 处理**——`uuid_break` 停止播放后，进入 UserSpeaking 开始新一轮 ASR
 
 ---
 
-## 5. LLM 调用策略优化
+## 2. 对话 FSM
 
-### 5.1 减少不必要的 LLM 调用
+### 2.1 状态总览
 
-并非每一轮对话都需要调用 LLM。以下场景可以直接走话术模板，跳过 LLM：
+![业务状态机](./diagrams/05-01-business-state-machine.mmd)
 
-| 场景 | 处理方式 |
+对话 FSM 实现在 `internal/engine/dialogue/fsm.go`，定义了 7 个状态：
+
+| 状态 | 职责 |
+|------|------|
+| **Opening** | 表明身份，确认是否方便沟通 |
+| **Qualification** | 判断是否值得继续沟通，获取关键字段 |
+| **InformationGathering** | 补全缺失字段，提高人工接手效率 |
+| **ObjectionHandling** | 处理"没兴趣""没空"等异议 |
+| **NextAction** | 引导下一步动作（加微信/预约/约时间） |
+| **MarkForFollowup** | 标记需要人工跟进，触发异步通知 |
+| **Closing** | 结束对话，收口并记录结果 |
+
+### 2.2 条件驱动的状态转换
+
+`TransitionRule` 结构体定义了转换规则：
+
+```go
+type TransitionRule struct {
+    From      engine.DialogueState
+    To        engine.DialogueState
+    Condition func(ctx *engine.DialogueContext) bool
+}
+```
+
+`FSM.Advance(ctx)` 遍历规则列表，找到第一个 `From == 当前状态 && Condition(ctx) == true` 的规则并转换。规则按组织分为 `openingRules`、`qualificationRules`、`informationGatheringRules`、`objectionHandlingRules`、`nextActionRules`、`followupRules`。
+
+### 2.3 DialogueContext
+
+转换条件基于 `DialogueContext` 进行判断：
+
+| 字段 | 说明 |
+|------|------|
+| `CurrentState` | 当前对话状态 |
+| `Intent` | LLM 识别的用户意图 |
+| `TurnCount` | 当前轮次数 |
+| `ObjectionCount` | 累计异议次数 |
+| `MaxObjections` | 异议次数上限（来自模板配置） |
+| `MaxTurns` | 最大对话轮次（来自模板配置） |
+| `HighValue` | 是否为高价值线索 |
+| `CollectedFields` | 已收集的结构化字段 |
+| `RequiredFields` | 必填字段列表（来自模板配置） |
+
+转换条件示例：Opening 状态下，若意图为 `continue`/`confirm`/`interested`/`ask_detail`，转入 Qualification；若意图为 `reject`/`not_interested`，直接 Closing。
+
+### 2.4 终止与恢复
+
+- `IsTerminal()` 检查当前状态是否为 `Closing`
+- `ForceState(s)` 强制设置状态，用于从快照恢复
+
+---
+
+## 3. 规则引擎
+
+### 3.1 LLMOutput → Decision 流程
+
+规则引擎（`internal/engine/rules/engine.go`）位于 LLM 输出和对话 FSM 之间，做出确定性的业务决策。
+
+![LLM与规则引擎边界](./diagrams/05-03-llm-rule-boundary.mmd)
+
+**输入：LLMOutput**
+
+```go
+type LLMOutput struct {
+    Intent          engine.Intent     // 用户意图
+    ExtractedFields map[string]string // 提取的字段
+    ObjectionType   string            // 异议类型
+    SuggestedReply  string            // LLM 建议回复
+    Confidence      float64           // 置信度
+}
+```
+
+**输出：Decision**
+
+```go
+type Decision struct {
+    NextState     engine.DialogueState // 建议下一状态
+    ReplyStrategy ReplyStrategy        // 回复策略
+    ReplyText     string               // 回复文本
+    ShouldEnd     bool                 // 是否结束通话
+    ShouldNotify  bool                 // 是否发送通知
+    Grade         engine.Grade         // 评级（可选）
+}
+```
+
+### 3.2 Evaluate 处理流程
+
+`Evaluate(llmOut, dctx)` 的执行步骤：
+
+1. **合并字段**——将 LLM 提取的字段合并到 `CollectedFields`
+2. **跟踪异议**——`busy`/`not_interested`/`hesitate` 意图累加 `ObjectionCount`
+3. **递增轮次**——`TurnCount++`
+4. **判断高价值**——基于意图和字段数量判定 `HighValue`
+5. **检查轮次上限**——达到 `MaxTurns` 时强制 Closing + 模板回复
+6. **选择回复策略**——根据状态、置信度和 LLM 建议回复选择策略
+
+### 3.3 回复策略
+
+| 策略 | 触发条件 | 说明 |
+|------|----------|------|
+| `ReplyTemplate` | Closing 状态 / 低置信度（< 0.5）/ confirm 意图 | 使用预定义模板 |
+| `ReplyLLM` | 高置信度（>= 0.5）且有建议回复 | 使用 LLM 草稿 |
+| `ReplyPrecompiled` | 预编译音频场景 | 直接播放音频，无需文本 |
+
+### 3.4 分级系统（A/B/C/D/X）
+
+`GradeCall(dctx, callStatus)` 在通话结束后生成评级：
+
+| 等级 | 判定条件 |
 |------|----------|
-| 开场白 | 预合成音频直接播放，不需要 LLM |
-| 标准异议回复 | 匹配异议关键词后直接使用模板话术 |
-| 确认类回复 | "好的"、"嗯"、"收到" → 规则引擎直接推进，无需 LLM |
-| 静默超时提示 | 直接播放预设提示语 |
-| 结束语 | 模板话术直接播放 |
+| **X** | 通话状态为无效（no_answer / voicemail 等） |
+| **D** | 意图为拒绝（reject / not_interested） |
+| **A** | 高意图信号（interested / schedule 等）+ 收集字段数 >= AMinFields |
+| **B** | 收集字段数 >= BMinFields + 轮次数 >= BMinTurns + 非拒绝意图 |
+| **C** | 犹豫意图或有异议记录 |
 
-### 5.2 Structured Output / JSON Mode
-
-所有 LLM 调用都使用 structured output 模式：
-
-- 保证输出格式可解析，避免正则提取的不稳定性
-- 定义明确的 JSON Schema，LLM 输出严格符合 schema
-- 解析失败时有兜底策略（使用默认意图 + 模板回复）
-
-### 5.3 上下文管理
-
-为控制 token 消耗和延迟，采用以下上下文管理策略：
-
-- **只保留最近 3-5 轮对话**，而非完整历史
-- **已提取字段以摘要形式附带**，不重复原始对话
-- **场景模板的系统提示词在会话开始时注入**，后续不重复发送完整模板
-
-```
-上下文结构：
-├── system_prompt（场景提示词，首轮注入）
-├── collected_fields_summary（已提取字段摘要）
-├── recent_turns（最近3-5轮）
-└── current_user_input（当前用户输入）
-```
-
-### 5.4 超时处理策略
-
-LLM 调用存在延迟风险，需要分级处理：
-
-| 阈值 | 处理方式 |
-|------|----------|
-| **< 3 秒** | 正常流程，等待 LLM 返回后合成回复 |
-| **3-8 秒** | 播放填充话术（"嗯，我看一下..."、"稍等..."），继续等待 LLM |
-| **> 8 秒** | 放弃本次 LLM 调用，使用模板回复兜底 |
-
-填充话术可预合成为音频，避免额外的 TTS 延迟。
-
-### 5.5 流式调用
-
-LLM 采用流式调用（streaming），配合流式 TTS：
-
-- LLM 每输出一个语句片段，立即送入 TTS
-- TTS 每合成一个音频片段，立即送入 FreeSWITCH 播放
-- 端到端延迟可从"等待完整回复"降低到"首个片段就绪即开始播放"
+分级规则由 `GradingRules` 配置，各阈值通过 `TemplateConfig` 传入，不同行业场景可独立配置。
 
 ---
 
-## 6. 分级设计
+## 4. LLM 集成
 
-### 6.1 等级体系
+### 4.1 双模式设计
 
-系统采用 A/B/C/D/X 五级体系，适用于所有行业场景：
+对话引擎同时支持两种 LLM 调用模式，分别用于不同场景：
 
-| 等级 | 含义 | 典型特征 |
-|------|------|----------|
-| **A** | 高意向 | 明确表达兴趣、主动询问细节、愿意约时间 |
-| **B** | 有意向但需跟进 | 未明确拒绝、有部分兴趣、需要更多信息 |
-| **C** | 低意向 | 兴趣不大、犹豫、需要较长培育周期 |
-| **D** | 无意向 | 明确拒绝、不符合目标人群 |
-| **X** | 无效 | 空号、无人接听、语音信箱、非目标联系人 |
+| 模式 | 用途 | 调用方法 | 输出格式 |
+|------|------|----------|----------|
+| **结构化输出** | 意图识别 + 字段提取 | `callLLM` → `llm.Generate` | JSON（含 intent, extracted_fields, suggested_reply, confidence） |
+| **流式自然文本** | TTS 语音合成 | `ProcessUserInputStream` → `llm.GenerateStream` | 纯文本，无 JSON，无格式标记 |
 
-### 6.2 设计原则
+### 4.2 结构化输出模式
 
-1. **分级不绑定行业**
-   - 等级体系是通用的，具体判定规则由场景模板定义
-   - 教育行业的 A 级标准和金融行业的 A 级标准可以不同
-   - 但等级的语义（高/中/低/无/无效）是统一的
+`callLLM` 通过 `buildMessages` 构建消息，系统提示词要求 LLM 返回 JSON：
 
-2. **分级依据可配置、版本化**
-   - 每个场景模板包含分级规则定义
-   - 分级规则支持版本管理，可回溯历史版本的判定标准
-   - 规则变更不影响历史数据的分级结果
-
-3. **每次通话输出结果列表**
-   - 每通电话结束后输出完整的结果结构：
-
-```json
+```
+你必须返回 JSON 格式，包含以下字段：
 {
-  "call_id": "uuid",
-  "grade": "B",
-  "grade_reasons": [
-    "用户未明确拒绝",
-    "询问了课程价格",
-    "表示需要考虑"
-  ],
-  "collected_fields": {
-    "name": "张先生",
-    "age": "35",
-    "interest": "英语培训"
-  },
-  "missing_fields": ["budget", "preferred_time"],
-  "next_action": "follow_up_wechat",
-  "summary": "张先生35岁，对英语培训有一定兴趣，询问了价格但表示需要考虑...",
-  "objections": ["need_to_think"],
-  "conversation_turns": 6,
-  "duration_seconds": 85
+  "intent": "意图",
+  "extracted_fields": {},
+  "suggested_reply": "你的回复内容",
+  "confidence": 0.8
 }
 ```
 
-### 6.3 分级规则示例
+系统提示词包含：当前对话状态、轮次计数、合法意图枚举。JSON 解析失败时降级为 `IntentUnknown` + 原始文本作为 `SuggestedReply`。
 
-```yaml
-# 场景模板中的分级规则定义
-grading_rules:
-  version: "1.0"
+### 4.3 流式自然文本模式
 
-  grade_A:
-    conditions:
-      - intent IN ["interested", "ask_detail", "schedule_meeting"]
-      - objection_count == 0 OR objection_resolved == true
-      - key_fields_collected >= 3
+`buildStreamMessages` 构建的系统提示词明确要求：
 
-  grade_B:
-    conditions:
-      - intent NOT IN ["reject", "not_interested"]
-      - turn_count >= 3
-      - key_fields_collected >= 1
+```
+请直接用自然语言回复用户，简短、口语化，像打电话一样自然。
+不要返回 JSON，不要加任何格式标记。
+禁止使用括号描述动作或情绪，如"（停顿）""（语气温和）"等。
+```
 
-  grade_C:
-    conditions:
-      - intent IN ["hesitate", "need_time"]
-      - objection_count <= 2
+### 4.4 ProcessUserInput 完整流程（非流式）
 
-  grade_D:
-    conditions:
-      - intent IN ["reject", "not_interested"]
-      - OR target_match == false
+```
+budgetCheck → recordUserTurn → callLLM（JSON）→ validateDecision
+→ validateOutput → checkOffTopic → ruleEngine.Evaluate → fsm.Advance
+→ validateResponse → cleanContent → recordBudget → recordBotTurn
+```
 
-  grade_X:
-    conditions:
-      - call_result IN ["no_answer", "voicemail", "invalid_number"]
+### 4.5 上下文管理
+
+- 保留最近 `maxHistory` 轮（默认 5）对话，通过 `recentTurns()` 截取
+- 已提取字段通过 `DialogueContext` 传递，不重复原始对话
+- LLM 温度 0.7，最大 512 token
+
+---
+
+## 5. Guard 安全防护链
+
+`internal/guard/` 包提供 7 层安全防护，在对话引擎中按需组合使用：
+
+### 5.1 CallBudget — 成本预算控制
+
+跟踪单通电话的 token、轮次、时长消耗，三个维度任一达标即触发：
+
+| 配置项 | 说明 |
+|--------|------|
+| `MaxTokens` | token 上限（输入+输出合计），0 不限制 |
+| `MaxTurns` | 最大对话轮次，0 不限制 |
+| `MaxDuration` | 最长通话时长，0 不限制 |
+| `DegradeThreshold` | 降级阈值比例（默认 0.8），达到后切换模板回复 |
+
+三级操作：`BudgetOK` → `BudgetDegrade`（模板回复）→ `BudgetEnd`（结束通话）。
+
+Token 估算：中文按 1.5 字符/token 粗略计算，`EstimateTokens` 函数实现。
+
+### 5.2 ResponseValidator — 响应安全校验
+
+检测 LLM 回复中的安全问题：
+
+- **AI 身份泄露**——检测"我是 AI""我是语言模型"等表述
+- **提示词泄露**——检测 LLM 泄露系统提示词内容
+- **超长文本**——超过最大字符数时截断
+
+检测到 AI 身份泄露或提示泄露时，替换为安全回复 `"好的，我了解了。"`
+
+### 5.3 ContentChecker — 内容清洗
+
+清洗 LLM 输出中不适合 TTS 合成的内容：
+
+- 移除 JSON 片段、代码块、Markdown 格式、URL
+- PII 检测（仅记录日志，不阻塞发送）
+- 清洗后文本为空时保留原始文本，避免丢失整段回复
+
+### 5.4 OffTopicTracker — 离题检测
+
+跟踪连续离题轮次（默认 `unknown` 意图视为离题）：
+
+| 阈值 | 默认值 | 操作 |
+|------|--------|------|
+| `ConvergeAfter` | 2 | 收束话术拉回正轨 |
+| `EndAfter` | 4 | 礼貌结束通话 |
+
+回到正轨（非离题意图）时计数器自动重置。
+
+### 5.5 OutputChecker — 输出状态校验
+
+校验 LLM 输出的意图在当前对话状态下是否合法：
+
+- 防止在 Opening 状态就输出 Closing 意图
+- 检测不合理的结束通话请求
+- 返回修正后的意图
+
+### 5.6 DecisionValidator — 决策校验
+
+校验 LLM 结构化输出（意图、字段等）的合法性，返回 `Sanitized` 版本。
+
+### 5.7 InputFilter — 输入过滤
+
+基于正则模式检测 prompt 注入：
+
+- 内置 13 种注入模式（如"忘记指令""ignore instructions""DAN mode"等）
+- 最大输入字符数限制（默认 500），超长截断
+- 输入文本清洗：去除首尾空白、折叠连续空白、移除控制字符
+
+### 5.8 防护链在引擎中的执行顺序
+
+**ProcessUserInput（非流式）：**
+
+```
+budgetCheck → callLLM → validateDecision → validateOutput
+→ checkOffTopic → ruleEngine.Evaluate → fsm.Advance
+→ validateResponse → cleanContent
+```
+
+**ProcessUserInputStream（流式）：**
+
+```
+budgetCheck → buildStreamMessages → GenerateStream
+→ streamTokensToSentences（每句 validateResponse + cleanContent）
 ```
 
 ---
 
-## 7. 端到端业务流程
+## 6. 流式分句
 
-### 7.1 流程总览
+### 6.1 两级分句策略
 
-![端到端流程](./images/05-04-e2e-flow.png)
+`streamTokensToSentences` 将 LLM token 流按标点切分为句段，逐句送入 TTS：
 
-端到端流程分为 **热路径（实时通话）** 和 **冷路径（异步后处理）** 两部分。
+| 层级 | 分隔符 | 触发条件 |
+|------|--------|----------|
+| **句级** | `。！？；.!?;` | 始终触发 |
+| **子句级** | `，、,：:` | 累积字符数 >= 6（`minClauseRunes`）时触发 |
 
-### 7.2 热路径：实时通话
+子句级切分的目的：将首段 TTS 延迟从约 300ms 降至约 100ms。`minClauseRunes = 6` 避免产生过短片段（如"嗯，"），确保 TTS 合成质量。
 
-热路径是通话进行中的实时处理链路，对延迟极其敏感：
+### 6.2 舞台指令移除
 
-```
-用户语音 → VAD → 流式ASR → 流式LLM → 规则引擎 → 流式TTS → 音频播放
-```
+LLM 流式输出可能包含"（停顿）""（语气温和）"等舞台指令。通过正则 `[（(][^）)]*[）)]` 匹配并移除，避免 TTS 合成无意义文本。
 
-关键要求：
-- **端到端延迟目标**：< 1.5 秒（从用户说完到机器人开始回复）
-- **流式处理**：ASR、LLM、TTS 均采用流式，不等待完整结果
-- **打断支持**：用户随时可打断机器人播放
+### 6.3 逐句安全校验
 
-### 7.3 冷路径：异步后处理
+每个分句在发送到通道前，经过两层校验：
+1. `validateResponse` — AI 身份泄露、提示泄露、长度
+2. `cleanContent` — JSON 片段、代码块、Markdown、URL
 
-冷路径是通话结束后的异步处理，对延迟不敏感，但要求可靠性：
+### 6.4 剩余文本处理
 
-1. **摘要生成**：调用 LLM 生成通话摘要
-2. **结果写入**：结构化结果写入 PostgreSQL
-3. **录音上传**：通话录音上传到 OSS
-4. **人工跟进通知**：根据分级结果，需要跟进的推送企业微信通知
+token 流结束后，缓冲区中剩余文本（未遇到分隔符的尾部）同样经过舞台指令移除和安全校验后发送。
 
-### 7.4 流程步骤详解
+---
 
-| 步骤 | 说明 |
+## 7. 预推理（Speculative Execution）
+
+### 7.1 PrepareStream
+
+`PrepareStream(ctx, userText)` 用于基于 partial ASR 结果的预推理——在 ASR 尚未出 Final 时提前启动 LLM，降低端到端延迟。
+
+返回三个值：
+- `<-chan string` — 句子通道，与 `ProcessUserInputStream` 相同的分句逻辑
+- `func()` — 确认函数（commitFn），在所有句段消费完成后调用
+- `error` — 错误
+
+### 7.2 延迟提交
+
+关键设计：**不立即产生副作用**。
+
+- 流式生成期间不记录对话轮次、不推进 FSM、不记录预算消耗
+- 调用方消费完句段后调用 `commitFn`，此时才执行：
+  1. 等待流式处理完成（`<-done` 确保 `replyText` 已写入）
+  2. 记录 user turn 和 bot turn
+  3. 推进 FSM（`recordStreamTurn`）
+  4. 记录预算消耗
+- 若预推理被取消（ctx 取消），不会产生任何副作用
+
+---
+
+## 8. 会话恢复
+
+### 8.1 RestoreFromSnapshot
+
+当通话因网络问题或系统故障中断后恢复时，通过 `RestoreFromSnapshot(data SnapshotData)` 还原对话引擎状态。
+
+`SnapshotData` 包含：
+
+| 字段 | 说明 |
 |------|------|
-| 上传联系人名单 | 通过管理后台上传 CSV/Excel，系统校验并入库 |
-| 创建外呼任务 | 选择名单、配置时段、并发数、关联场景模板 |
-| 选择领域模板 | 从模板库选择，生成运行时快照（不可变） |
-| 系统筛选待触达对象 | 根据任务配置筛选本批次需拨打的联系人 |
-| Admission Control | 检查当前并发容量，控制呼出速率 |
-| Call Worker 发起外呼 | 通过 FreeSWITCH originate 命令发起呼叫 |
-| AMD 检测 | 接通后检测是否为真人（排除语音信箱） |
-| 实时对话 | 进入流式管道循环（VAD→ASR→LLM→规则→TTS→播放） |
-| 结束与后处理 | 挂断后进入冷路径异步处理 |
+| `DialogueState` | 中断时的对话状态名称（如 `"INFORMATION_GATHERING"`） |
+| `Turns` | 中断前的最近对话轮次 |
+| `CollectedFields` | 已收集的结构化字段 |
 
----
+恢复步骤：
+1. **FSM 状态恢复**——通过 `ParseDialogueState` 解析状态名称，`ForceState` 设置
+2. **对话轮次恢复**——复制 Turns 到引擎，`TurnCount = len(Turns) / 2`（每轮含 user + bot）
+3. **字段恢复**——`maps.Copy` 合并到 `CollectedFields`
 
-## 8. 单通电话时序
+### 8.2 恢复开场白
 
-### 8.1 时序总览
+恢复呼叫时使用专门的开场白：
 
-![单通时序](./images/05-05-call-sequence.png)
+```
+"您好，刚才电话好像断了，我们接着聊。"
+```
 
-### 8.2 时序说明
-
-一通完整的外呼电话经历以下阶段：
-
-#### 阶段一：任务派发与呼叫建立
-
-1. `task_service` 将外呼任务（含模板快照 ID）写入 Redis 队列
-2. `Call Worker` 从队列取出任务
-3. `Call Worker` 通过 FreeSWITCH `originate` 命令发起呼叫
-4. FreeSWITCH 向被叫发起拨号
-
-#### 阶段二：接通判断
-
-- **未接通/语音信箱**：FreeSWITCH 返回失败事件，Call Worker 写入完成事件（失败），流程结束
-- **接通且为真人**：进入实时对话阶段
-
-#### 阶段三：实时对话循环
-
-1. Call Worker 播放预合成的开场白
-2. 进入循环：
-   - 用户语音通过 WebSocket 送入 Call Worker
-   - Call Worker 将音频流式送入 ASR
-   - ASR 返回 partial/final 识别结果
-   - Call Worker 将识别结果送入 LLM（流式），获取意图和字段
-   - Call Worker 将当前状态、字段、意图送入规则引擎
-   - 规则引擎返回决策（下一状态、回复策略）
-   - Call Worker 将回复文本流式送入 TTS
-   - TTS 流式音频通过 FreeSWITCH 播放给用户
-3. 如果用户打断：执行 `uuid_break` 停止播放，开始新一轮
-
-#### 阶段四：异步后处理
-
-1. FreeSWITCH 发出挂断事件
-2. Call Worker 将完成事件（含原始对话数据）写入 Redis 队列
-3. Post-Processor 消费完成事件：
-   - 调用 LLM 生成通话摘要
-   - 写入 PostgreSQL（结构化结果）
-   - 上传录音到 OSS
-   - 如需人工跟进，推送企业微信通知
-
-### 8.3 关键延迟节点
-
-| 节点 | 目标延迟 | 优化手段 |
-|------|----------|----------|
-| VAD → ASR final | < 300ms | 流式 ASR + endpointing 优化 |
-| ASR → LLM 首 token | < 500ms | 流式调用 + 上下文压缩 |
-| LLM → TTS 首音频 | < 300ms | 流式 TTS + 句子级切分 |
-| TTS → 用户听到 | < 100ms | FreeSWITCH 本地播放 |
-| **总计** | **< 1.5s** | 全链路流式 |
+通过 `GetRecoveryOpeningText()` 获取，区别于正常开场白 `GetOpeningText()`。
 
 ---
 
 ## 附录
 
-### A. 术语表
+### A. 意图类型
 
-| 术语 | 说明 |
+| 意图 | 说明 |
 |------|------|
-| AMD | Answering Machine Detection，语音信箱检测 |
-| VAD | Voice Activity Detection，语音活动检测 |
-| ASR | Automatic Speech Recognition，语音识别 |
-| TTS | Text-to-Speech，语音合成 |
-| LLM | Large Language Model，大语言模型 |
-| Barge-in | 用户打断机器人播放 |
-| Structured Output | LLM 以结构化格式（JSON）输出 |
-| 运行时快照 | 场景模板在任务创建时的不可变副本 |
+| `continue` | 愿意继续 |
+| `confirm` | 确认/同意 |
+| `interested` | 感兴趣 |
+| `ask_detail` | 追问细节 |
+| `hesitate` | 犹豫 |
+| `busy` | 忙/没时间 |
+| `not_interested` | 不感兴趣 |
+| `reject` | 明确拒绝 |
+| `schedule` | 想预约时间 |
+| `unknown` | 无法识别 |
 
-### B. 相关文档
+### B. 代码索引
 
-- 媒体状态机详细设计：参见媒体处理模块文档
-- 场景模板设计：参见数据模型文档
-- FreeSWITCH 集成：参见电话通道文档
-- 流式管道设计：参见实时处理模块文档
+| 组件 | 文件路径 |
+|------|----------|
+| 对话引擎 | `internal/engine/dialogue/engine.go` |
+| 对话 FSM | `internal/engine/dialogue/fsm.go` |
+| 规则引擎 | `internal/engine/rules/engine.go` |
+| 对话上下文 | `internal/engine/context.go` |
+| 类型定义 | `internal/engine/types.go` |
+| 预算控制 | `internal/guard/budget.go` |
+| 响应校验 | `internal/guard/response.go` |
+| 内容清洗 | `internal/guard/content.go` |
+| 离题检测 | `internal/guard/offtopic.go` |
+| 输出校验 | `internal/guard/output.go` |
+| 决策校验 | `internal/guard/output_validator.go` |
+| 输入过滤 | `internal/guard/filter.go` |

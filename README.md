@@ -91,10 +91,13 @@ clarion/
 │   │   └── strategy/         异步对话策略
 │   ├── guard/                对话安全防护
 │   │   ├── budget.go         Token/时间预算控制
+│   │   ├── filter.go         输入过滤（防 prompt 注入）
 │   │   ├── response.go       回复格式校验
 │   │   ├── content.go        内容安全过滤
 │   │   ├── offtopic.go       跑题检测
-│   │   └── output.go         输出安全校验
+│   │   ├── output.go         输出安全校验
+│   │   ├── validator.go      决策校验（LLM 输出结构验证）
+│   │   └── output_validator.go 统一输出校验器
 │   ├── resilience/           韧性容错
 │   │   ├── breaker.go        熔断器
 │   │   ├── retry.go          重试（指数退避）
@@ -178,14 +181,14 @@ task pipeline-test        # WAV → ASR → LLM → TTS → WAV
 - 表驱动媒体状态机（预置电话 / APP 两套状态转换）
 - WebRTC VAD 人声检测
 - Barge-in 打断检测
-- Transport 和 dialogue.Engine 两个核心抽象接口
+- Transport 和 aiface.DialogEngine 两个核心抽象接口
 
-Clarion 作为 Sonata 的第一个产品，实现了 Transport（FreeSWITCH ESL 音频桥接）和 dialogue.Engine（外呼对话引擎），并在此基础上构建了完整的外呼产品能力：
+Clarion 作为 Sonata 的第一个产品，实现了 Transport（FreeSWITCH ESL 音频桥接）和 aiface.DialogEngine（外呼对话引擎），并在此基础上构建了完整的外呼产品能力：
 
 | Sonata 提供 | Clarion 实现 |
 |-------------|-------------|
 | `Transport` 接口 | ESL + WebSocket 音频桥接 |
-| `dialogue.Engine` 接口 | 规则驱动的对话引擎 |
+| `aiface.DialogEngine` 接口 | 规则驱动的对话引擎 |
 | `media.PhoneTransitions()` | 电话媒体状态机集成 |
 | `ASRProvider` / `LLMProvider` / `TTSProvider` | 通义听悟 / DeepSeek / DashScope 实现 |
 | — | 任务调度 + REST API + 后处理管线 |

@@ -7,6 +7,7 @@ erDiagram
     CALL_TASKS ||--o{ CALLS : generates
     CALLS ||--o{ DIALOGUE_TURNS : contains
     CALLS ||--o{ CALL_EVENTS : logs
+    CALLS ||--o| OPPORTUNITIES : extracts
 
     CONTACTS {
         bigint id PK
@@ -17,6 +18,7 @@ erDiagram
         string current_status
         boolean do_not_call
         datetime created_at
+        datetime updated_at
     }
 
     SCENARIO_TEMPLATES {
@@ -34,6 +36,7 @@ erDiagram
         string status
         int version
         datetime created_at
+        datetime updated_at
     }
 
     TEMPLATE_SNAPSHOTS {
@@ -53,7 +56,10 @@ erDiagram
         int daily_limit
         int max_concurrent
         string status
+        int total_contacts
+        int completed_contacts
         datetime created_at
+        datetime updated_at
     }
 
     CALLS {
@@ -73,6 +79,7 @@ erDiagram
         jsonb rule_trace
         text ai_summary
         datetime created_at
+        datetime updated_at
     }
 
     DIALOGUE_TURNS {
@@ -98,4 +105,22 @@ erDiagram
         bigint timestamp_ms
         jsonb metadata_json
         datetime created_at
+    }
+
+    OPPORTUNITIES {
+        bigint id PK
+        bigint call_id FK
+        bigint contact_id FK
+        bigint task_id FK
+        int score
+        string intent_type
+        string budget_signal
+        string timeline_signal
+        string contact_role
+        jsonb pain_points
+        string followup_action
+        date followup_date
+        boolean needs_human_review
+        datetime created_at
+        datetime updated_at
     }

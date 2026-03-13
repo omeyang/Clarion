@@ -1,32 +1,48 @@
 flowchart LR
     subgraph BIZ["Call Worker"]
-        CW["实时会话管道"]
+        CW["Session 实时会话管道"]
     end
 
-    subgraph API["流式 Provider 接口层"]
-        ASR["asr_provider<br/>start_stream / feed_audio<br/>on_partial / on_final<br/>on_endpoint / stop"]
-        LLM["llm_provider<br/>generate_stream<br/>→ Iterator of tokens"]
-        TTS["tts_provider<br/>synthesize_stream<br/>→ Iterator of audio chunks<br/>supports cancel"]
+    subgraph IFACE["Go 接口层（aiface）"]
+        ASR["ASRProvider<br/>StartStream(ctx, cfg) → ASRStream<br/>─────────────────<br/>ASRStream:<br/>FeedAudio(ctx, chunk) error<br/>Events() ←chan ASREvent<br/>Close() error"]
+        LLM["LLMProvider<br/>GenerateStream(ctx, msgs, cfg)<br/>→ ←chan string<br/>Generate(ctx, msgs, cfg)<br/>→ string"]
+        TTS["TTSProvider<br/>SynthesizeStream(ctx, textCh, cfg)<br/>→ ←chan []byte<br/>Synthesize(ctx, text, cfg)<br/>→ []byte<br/>Cancel()"]
     end
 
-    subgraph MVP["MVP Provider 实现"]
-        AliyunASR["阿里云实时ASR"]
-        DeepSeek["DeepSeek SSE"]
-        AliyunTTS["阿里云流式TTS"]
+    subgraph CLOUD["云端 Provider 实现"]
+        QwenASR["provider/asr/qwen.go<br/>通义听悟<br/>WebSocket 流式"]
+        DeepSeek["provider/llm/deepseek.go<br/>DeepSeek<br/>SSE 流式"]
+        DashTTS["provider/tts/dashscope.go<br/>DashScope CosyVoice<br/>WebSocket + 连接池"]
     end
 
-    subgraph LOCAL["本地 Provider（后续可切换）"]
-        FunASR["FunASR"]
-        CosyVoice["CosyVoice"]
+    subgraph LOCAL["本地推理（sherpa-onnx CGO）"]
+        Paraformer["sherpa/asr.go<br/>Paraformer 本地 ASR"]
+        VITS["sherpa/tts.go<br/>VITS 本地 TTS"]
+        SileroVAD["sherpa/vad.go<br/>Silero VAD"]
+    end
+
+    subgraph HYBRID["混合模式"]
+        Racing["sherpa/raceasr.go<br/>RacingASR<br/>云端 vs 本地竞速"]
+        Tiered["sherpa/tieredtts.go<br/>TieredTTS<br/>短→本地 / 长→云端"]
+        Omni["provider/realtime/omni.go<br/>Qwen3-Omni-Flash-Realtime<br/>端到端实时模型"]
+        Smart["provider/strategy/smart.go<br/>Smart LLM Strategy<br/>异步业务分析"]
     end
 
     CW --> ASR
     CW --> LLM
     CW --> TTS
 
-    ASR --> AliyunASR
+    ASR --> QwenASR
     LLM --> DeepSeek
-    TTS --> AliyunTTS
+    TTS --> DashTTS
 
-    ASR -.后续可切换.-> FunASR
-    TTS -.后续可切换.-> CosyVoice
+    ASR -.-> Paraformer
+    TTS -.-> VITS
+
+    Racing --> QwenASR
+    Racing --> Paraformer
+    Tiered --> DashTTS
+    Tiered --> VITS
+
+    CW -.->|"混合管线"| Omni
+    Omni -.-> Smart
