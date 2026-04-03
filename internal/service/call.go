@@ -5,12 +5,13 @@ import (
 	"fmt"
 
 	"github.com/omeyang/clarion/internal/model"
+	"github.com/omeyang/xkit/pkg/context/xtenant"
 )
 
 // CallRepo 定义通话服务所需的数据访问接口。
 type CallRepo interface {
 	GetByID(ctx context.Context, id int64) (*model.Call, error)
-	ListByTask(ctx context.Context, taskID int64, offset, limit int) ([]model.Call, int, error)
+	ListByTask(ctx context.Context, tenantID string, taskID int64, offset, limit int) ([]model.Call, int, error)
 	ListTurns(ctx context.Context, callID int64) ([]model.DialogueTurn, error)
 }
 
@@ -33,9 +34,13 @@ func (s *CallSvc) GetByID(ctx context.Context, id int64) (*model.Call, error) {
 	return c, nil
 }
 
-// ListByTask 按任务 ID 分页获取通话列表。
+// ListByTask 按任务 ID 分页获取当前租户的通话列表。
 func (s *CallSvc) ListByTask(ctx context.Context, taskID int64, offset, limit int) ([]model.Call, int, error) {
-	calls, total, err := s.repo.ListByTask(ctx, taskID, offset, limit)
+	tenantID, err := xtenant.RequireTenantID(ctx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("获取租户 ID: %w", err)
+	}
+	calls, total, err := s.repo.ListByTask(ctx, tenantID, taskID, offset, limit)
 	if err != nil {
 		return nil, 0, fmt.Errorf("列出任务 %d 的通话: %w", taskID, err)
 	}

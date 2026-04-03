@@ -51,7 +51,7 @@ func TestContactHandler_Create(t *testing.T) {
 
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/contacts", strings.NewReader(tt.body))
 			rec := httptest.NewRecorder()
-			mux.ServeHTTP(rec, req)
+			mux.ServeHTTP(rec, withTenantCtx(req))
 
 			assert.Equal(t, tt.wantStatus, rec.Code)
 
@@ -104,7 +104,7 @@ func TestContactHandler_GetByID(t *testing.T) {
 
 			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
 			rec := httptest.NewRecorder()
-			mux.ServeHTTP(rec, req)
+			mux.ServeHTTP(rec, withTenantCtx(req))
 
 			assert.Equal(t, tt.wantStatus, rec.Code)
 		})
@@ -122,7 +122,7 @@ func TestContactHandler_List(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/contacts?offset=0&limit=10", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -140,7 +140,7 @@ func TestContactHandler_List_Empty(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/contacts", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -193,7 +193,7 @@ func TestContactHandler_UpdateStatus(t *testing.T) {
 
 			req := httptest.NewRequest(http.MethodPatch, tt.path, strings.NewReader(tt.body))
 			rec := httptest.NewRecorder()
-			mux.ServeHTTP(rec, req)
+			mux.ServeHTTP(rec, withTenantCtx(req))
 
 			assert.Equal(t, tt.wantStatus, rec.Code)
 		})
@@ -234,7 +234,7 @@ func TestContactHandler_BulkCreate(t *testing.T) {
 
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/contacts/bulk", strings.NewReader(tt.body))
 			rec := httptest.NewRecorder()
-			mux.ServeHTTP(rec, req)
+			mux.ServeHTTP(rec, withTenantCtx(req))
 
 			assert.Equal(t, tt.wantStatus, rec.Code)
 
@@ -255,7 +255,7 @@ func TestContactHandler_List_ServiceError(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/contacts", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
@@ -268,7 +268,7 @@ func TestContactHandler_GetByID_ServiceError(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/contacts/1", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
@@ -282,7 +282,7 @@ func TestContactHandler_Create_ServiceError(t *testing.T) {
 	body := `{"phone_masked":"138****1234","phone_hash":"abc123"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/contacts", strings.NewReader(body))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
@@ -296,7 +296,7 @@ func TestContactHandler_Create_WithProfileJSON(t *testing.T) {
 	body := `{"phone_masked":"138****1234","phone_hash":"abc123","profile_json":{"name":"test"}}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/contacts", strings.NewReader(body))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusCreated, rec.Code)
 }
@@ -310,7 +310,7 @@ func TestContactHandler_UpdateStatus_InvalidJSON(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/contacts/1/status", strings.NewReader(`{bad`))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
@@ -324,7 +324,7 @@ func TestContactHandler_UpdateStatus_ServiceError(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/contacts/1/status",
 		strings.NewReader(`{"status":"called"}`))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
@@ -338,7 +338,7 @@ func TestContactHandler_BulkCreate_ServiceError(t *testing.T) {
 	body := `{"contacts":[{"phone_masked":"138****1234","phone_hash":"h1"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/contacts/bulk", strings.NewReader(body))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }

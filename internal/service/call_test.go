@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/omeyang/clarion/internal/model"
+	"github.com/omeyang/xkit/pkg/context/xtenant"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,7 +14,7 @@ import (
 // mockCallRepo 是 CallRepo 的测试替身。
 type mockCallRepo struct {
 	getByID    func(ctx context.Context, id int64) (*model.Call, error)
-	listByTask func(ctx context.Context, taskID int64, offset, limit int) ([]model.Call, int, error)
+	listByTask func(ctx context.Context, tenantID string, taskID int64, offset, limit int) ([]model.Call, int, error)
 	listTurns  func(ctx context.Context, callID int64) ([]model.DialogueTurn, error)
 }
 
@@ -21,8 +22,8 @@ func (m *mockCallRepo) GetByID(ctx context.Context, id int64) (*model.Call, erro
 	return m.getByID(ctx, id)
 }
 
-func (m *mockCallRepo) ListByTask(ctx context.Context, taskID int64, offset, limit int) ([]model.Call, int, error) {
-	return m.listByTask(ctx, taskID, offset, limit)
+func (m *mockCallRepo) ListByTask(ctx context.Context, tenantID string, taskID int64, offset, limit int) ([]model.Call, int, error) {
+	return m.listByTask(ctx, tenantID, taskID, offset, limit)
 }
 
 func (m *mockCallRepo) ListTurns(ctx context.Context, callID int64) ([]model.DialogueTurn, error) {
@@ -92,7 +93,7 @@ func TestCallSvc_ListByTask(t *testing.T) {
 			offset: 0,
 			limit:  20,
 			repo: &mockCallRepo{
-				listByTask: func(_ context.Context, _ int64, _, _ int) ([]model.Call, int, error) {
+				listByTask: func(_ context.Context, _ string, _ int64, _, _ int) ([]model.Call, int, error) {
 					return []model.Call{{ID: 1}, {ID: 2}}, 2, nil
 				},
 			},
@@ -103,7 +104,7 @@ func TestCallSvc_ListByTask(t *testing.T) {
 			name:   "仓库返回错误时包装错误信息",
 			taskID: 10,
 			repo: &mockCallRepo{
-				listByTask: func(_ context.Context, _ int64, _, _ int) ([]model.Call, int, error) {
+				listByTask: func(_ context.Context, _ string, _ int64, _, _ int) ([]model.Call, int, error) {
 					return nil, 0, errors.New("db error")
 				},
 			},
@@ -114,7 +115,8 @@ func TestCallSvc_ListByTask(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewCallSvc(tt.repo)
-			calls, total, err := svc.ListByTask(context.Background(), tt.taskID, tt.offset, tt.limit)
+			ctx, _ := xtenant.WithTenantID(context.Background(), "test-tenant")
+			calls, total, err := svc.ListByTask(ctx, tt.taskID, tt.offset, tt.limit)
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "列出任务")

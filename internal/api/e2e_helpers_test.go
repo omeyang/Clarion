@@ -81,7 +81,7 @@ func (r *e2eContactRepo) GetByID(_ context.Context, id int64) (*model.Contact, e
 	return &clone, nil
 }
 
-func (r *e2eContactRepo) List(_ context.Context, offset, limit int) ([]model.Contact, int, error) {
+func (r *e2eContactRepo) List(_ context.Context, _ string, offset, limit int) ([]model.Contact, int, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	var all []model.Contact
@@ -152,7 +152,7 @@ func (r *e2eTemplateRepo) GetByID(_ context.Context, id int64) (*model.ScenarioT
 	return &clone, nil
 }
 
-func (r *e2eTemplateRepo) List(_ context.Context, offset, limit int) ([]model.ScenarioTemplate, int, error) {
+func (r *e2eTemplateRepo) List(_ context.Context, _ string, offset, limit int) ([]model.ScenarioTemplate, int, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	var all []model.ScenarioTemplate
@@ -244,7 +244,7 @@ func (r *e2eTaskRepo) GetByID(_ context.Context, id int64) (*model.CallTask, err
 	return &clone, nil
 }
 
-func (r *e2eTaskRepo) List(_ context.Context, offset, limit int) ([]model.CallTask, int, error) {
+func (r *e2eTaskRepo) List(_ context.Context, _ string, offset, limit int) ([]model.CallTask, int, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	var all []model.CallTask
@@ -304,7 +304,7 @@ func (r *e2eCallRepo) GetByID(_ context.Context, id int64) (*model.Call, error) 
 	return &clone, nil
 }
 
-func (r *e2eCallRepo) ListByTask(_ context.Context, taskID int64, offset, limit int) ([]model.Call, int, error) {
+func (r *e2eCallRepo) ListByTask(_ context.Context, _ string, taskID int64, offset, limit int) ([]model.Call, int, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	var filtered []model.Call

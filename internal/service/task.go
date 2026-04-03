@@ -6,13 +6,14 @@ import (
 
 	"github.com/omeyang/clarion/internal/engine"
 	"github.com/omeyang/clarion/internal/model"
+	"github.com/omeyang/xkit/pkg/context/xtenant"
 )
 
 // TaskRepo 定义任务服务所需的数据访问接口。
 type TaskRepo interface {
 	Create(ctx context.Context, t *model.CallTask) (int64, error)
 	GetByID(ctx context.Context, id int64) (*model.CallTask, error)
-	List(ctx context.Context, offset, limit int) ([]model.CallTask, int, error)
+	List(ctx context.Context, tenantID string, offset, limit int) ([]model.CallTask, int, error)
 	Update(ctx context.Context, t *model.CallTask) error
 	UpdateStatus(ctx context.Context, id int64, status engine.TaskStatus) error
 }
@@ -29,6 +30,11 @@ func NewTaskSvc(repo TaskRepo) *TaskSvc {
 
 // Create 创建新的外呼任务，设置初始状态和默认并发数。
 func (s *TaskSvc) Create(ctx context.Context, t *model.CallTask) (int64, error) {
+	tenantID, err := xtenant.RequireTenantID(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("获取租户 ID: %w", err)
+	}
+	t.TenantID = tenantID
 	t.Status = engine.TaskDraft
 	if t.MaxConcurrent == 0 {
 		t.MaxConcurrent = 1
@@ -49,9 +55,13 @@ func (s *TaskSvc) GetByID(ctx context.Context, id int64) (*model.CallTask, error
 	return t, nil
 }
 
-// List 分页获取任务列表。
+// List 分页获取当前租户的任务列表。
 func (s *TaskSvc) List(ctx context.Context, offset, limit int) ([]model.CallTask, int, error) {
-	tasks, total, err := s.repo.List(ctx, offset, limit)
+	tenantID, err := xtenant.RequireTenantID(ctx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("获取租户 ID: %w", err)
+	}
+	tasks, total, err := s.repo.List(ctx, tenantID, offset, limit)
 	if err != nil {
 		return nil, 0, fmt.Errorf("列出任务: %w", err)
 	}

@@ -55,6 +55,7 @@ func main() {
 					return runServe(cmd.Root().String("config"))
 				},
 			},
+			adminCommands(),
 			{
 				Name:  "simulate",
 				Usage: "Start text simulation mode",

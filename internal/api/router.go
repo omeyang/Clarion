@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/omeyang/clarion/internal/api/handler"
+	"github.com/omeyang/clarion/internal/auth"
 	"github.com/omeyang/clarion/internal/service"
 )
 
@@ -18,14 +19,54 @@ type Services struct {
 	Calls     *service.CallSvc
 }
 
+// Dependencies 组合路由层所需的全部依赖。
+type Dependencies struct {
+	Services    *Services
+	AuthHandler *auth.Handler
+	Issuer      *auth.Issuer
+	Logger      *slog.Logger
+}
+
 // Router 设置所有 HTTP 路由和中间件。
 // 如果 services 为 nil，则只注册健康检查端点。
 func Router(logger *slog.Logger, services *Services) http.Handler {
 	return RouterWithHealth(logger, services, nil)
 }
 
+// RouterWithAuth 设置带认证的完整路由。
+func RouterWithAuth(deps *Dependencies, health *handler.HealthHandler) http.Handler {
+	mux := http.NewServeMux()
+
+	// ── 公开端点（无认证）───────────────────────
+	mux.HandleFunc("GET /healthz", handleHealthz)
+	if health != nil {
+		mux.Handle("GET /health", health)
+	}
+	mux.HandleFunc("POST /api/v1/auth/token", deps.AuthHandler.HandleToken)
+
+	// ── 业务端点（认证 + 租户身份）──────────────────
+	if deps.Services != nil {
+		tenantMux := http.NewServeMux()
+		handler.NewContactHandler(deps.Services.Contacts).Register(tenantMux)
+		handler.NewTemplateHandler(deps.Services.Templates).Register(tenantMux)
+		handler.NewTaskHandler(deps.Services.Tasks).Register(tenantMux)
+		handler.NewCallHandler(deps.Services.Calls).Register(tenantMux)
+		mux.Handle("/api/v1/", auth.RequireTenant(tenantMux))
+	}
+
+	// ── 全局中间件（顺序：最外层最先执行）──────────
+	var h http.Handler = mux
+	h = RequestIDMiddleware(h)
+	h = CORSMiddleware(h)
+	h = auth.Middleware(deps.Issuer)(h)
+	h = LoggingMiddleware(deps.Logger)(h)
+	h = RecoveryMiddleware(deps.Logger)(h)
+
+	return h
+}
+
 // RouterWithHealth 设置所有 HTTP 路由和中间件，支持注入 HealthHandler。
-// 如果 health 为 nil，则使用默认的简单健康检查。
+// 兼容无认证模式（用于测试和迁移期间）。
 func RouterWithHealth(logger *slog.Logger, services *Services, health *handler.HealthHandler) http.Handler {
 	mux := http.NewServeMux()
 

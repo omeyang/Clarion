@@ -9,6 +9,7 @@ import (
 // Contact 表示外呼目标联系人。
 type Contact struct {
 	ID            int64           `json:"id"`
+	TenantID      string          `json:"tenant_id"`
 	PhoneMasked   string          `json:"phone_masked"`
 	PhoneHash     string          `json:"phone_hash"`
 	Source        string          `json:"source"`

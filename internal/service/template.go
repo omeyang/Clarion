@@ -8,13 +8,14 @@ import (
 
 	"github.com/omeyang/clarion/internal/engine"
 	"github.com/omeyang/clarion/internal/model"
+	"github.com/omeyang/xkit/pkg/context/xtenant"
 )
 
 // TemplateRepo 定义模板服务所需的数据访问接口。
 type TemplateRepo interface {
 	Create(ctx context.Context, t *model.ScenarioTemplate) (int64, error)
 	GetByID(ctx context.Context, id int64) (*model.ScenarioTemplate, error)
-	List(ctx context.Context, offset, limit int) ([]model.ScenarioTemplate, int, error)
+	List(ctx context.Context, tenantID string, offset, limit int) ([]model.ScenarioTemplate, int, error)
 	Update(ctx context.Context, t *model.ScenarioTemplate) error
 	UpdateStatus(ctx context.Context, id int64, status engine.TemplateStatus) error
 	CreateSnapshot(ctx context.Context, snap *model.TemplateSnapshot) (int64, error)
@@ -33,6 +34,11 @@ func NewTemplateSvc(repo TemplateRepo) *TemplateSvc {
 
 // Create 创建新的场景模板，设置初始状态和版本。
 func (s *TemplateSvc) Create(ctx context.Context, t *model.ScenarioTemplate) (int64, error) {
+	tenantID, err := xtenant.RequireTenantID(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("获取租户 ID: %w", err)
+	}
+	t.TenantID = tenantID
 	t.Status = engine.TemplateDraft
 	t.Version = 1
 	id, err := s.repo.Create(ctx, t)
@@ -51,9 +57,13 @@ func (s *TemplateSvc) GetByID(ctx context.Context, id int64) (*model.ScenarioTem
 	return t, nil
 }
 
-// List 分页获取模板列表。
+// List 分页获取当前租户的模板列表。
 func (s *TemplateSvc) List(ctx context.Context, offset, limit int) ([]model.ScenarioTemplate, int, error) {
-	templates, total, err := s.repo.List(ctx, offset, limit)
+	tenantID, err := xtenant.RequireTenantID(ctx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("获取租户 ID: %w", err)
+	}
+	templates, total, err := s.repo.List(ctx, tenantID, offset, limit)
 	if err != nil {
 		return nil, 0, fmt.Errorf("列出模板: %w", err)
 	}

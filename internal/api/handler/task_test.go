@@ -51,7 +51,7 @@ func TestTaskHandler_Create(t *testing.T) {
 
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks", strings.NewReader(tt.body))
 			rec := httptest.NewRecorder()
-			mux.ServeHTTP(rec, req)
+			mux.ServeHTTP(rec, withTenantCtx(req))
 
 			assert.Equal(t, tt.wantStatus, rec.Code)
 
@@ -104,7 +104,7 @@ func TestTaskHandler_GetByID(t *testing.T) {
 
 			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
 			rec := httptest.NewRecorder()
-			mux.ServeHTTP(rec, req)
+			mux.ServeHTTP(rec, withTenantCtx(req))
 
 			assert.Equal(t, tt.wantStatus, rec.Code)
 		})
@@ -122,7 +122,7 @@ func TestTaskHandler_List(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -142,7 +142,7 @@ func TestTaskHandler_Update(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/tasks/1",
 		strings.NewReader(`{"name":"Updated Task","daily_limit":200}`))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 }
@@ -158,7 +158,7 @@ func TestTaskHandler_UpdateStatus(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/tasks/1/status",
 		strings.NewReader(`{"status":"running"}`))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 }
@@ -173,7 +173,7 @@ func TestTaskHandler_Start(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/1/start", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -192,7 +192,7 @@ func TestTaskHandler_Pause(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/1/pause", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -211,7 +211,7 @@ func TestTaskHandler_Cancel(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/1/cancel", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -228,7 +228,7 @@ func TestTaskHandler_Start_NotFound(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/999/start", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
@@ -241,7 +241,7 @@ func TestTaskHandler_List_ServiceError(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
@@ -254,7 +254,7 @@ func TestTaskHandler_GetByID_ServiceError(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/1", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
@@ -268,7 +268,7 @@ func TestTaskHandler_Create_ServiceError(t *testing.T) {
 	body := `{"name":"Task","scenario_template_id":1}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks", strings.NewReader(body))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
@@ -282,7 +282,7 @@ func TestTaskHandler_Update_InvalidID(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/tasks/abc",
 		strings.NewReader(`{"name":"Updated"}`))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
@@ -296,7 +296,7 @@ func TestTaskHandler_Update_InvalidJSON(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/tasks/1", strings.NewReader(`{bad`))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
@@ -310,7 +310,7 @@ func TestTaskHandler_Update_NotFound(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/tasks/999",
 		strings.NewReader(`{"name":"Updated"}`))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
@@ -324,7 +324,7 @@ func TestTaskHandler_UpdateStatus_InvalidID(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/tasks/abc/status",
 		strings.NewReader(`{"status":"running"}`))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
@@ -339,7 +339,7 @@ func TestTaskHandler_UpdateStatus_InvalidJSON(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/tasks/1/status",
 		strings.NewReader(`{bad`))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
@@ -354,7 +354,7 @@ func TestTaskHandler_UpdateStatus_EmptyStatus(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/tasks/1/status",
 		strings.NewReader(`{"status":""}`))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
@@ -368,7 +368,7 @@ func TestTaskHandler_UpdateStatus_ServiceError(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/tasks/999/status",
 		strings.NewReader(`{"status":"running"}`))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
@@ -381,7 +381,7 @@ func TestTaskHandler_Pause_NotFound(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/999/pause", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
@@ -394,7 +394,7 @@ func TestTaskHandler_Cancel_NotFound(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/999/cancel", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
@@ -407,7 +407,7 @@ func TestTaskHandler_Start_InvalidID(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/abc/start", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }

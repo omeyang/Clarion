@@ -56,3 +56,4 @@ scripts/.quality-baseline
 
 # ── 本地测试音频 ──────────────────────────────────────────────
 deploy/local/test-audio/
+/clarion

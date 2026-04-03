@@ -5,12 +5,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync"
 
 	"github.com/omeyang/clarion/internal/engine"
 	"github.com/omeyang/clarion/internal/model"
 	"github.com/omeyang/clarion/internal/service"
+	"github.com/omeyang/xkit/pkg/context/xtenant"
 )
+
+// withTenantCtx 为 HTTP 请求注入测试租户 ID。
+func withTenantCtx(r *http.Request) *http.Request {
+	ctx, _ := xtenant.WithTenantID(r.Context(), "test-tenant")
+	return r.WithContext(ctx)
+}
 
 // memContactRepo 是用于测试的内存联系人仓储。
 type memContactRepo struct {
@@ -45,7 +53,7 @@ func (s *memContactRepo) GetByID(_ context.Context, id int64) (*model.Contact, e
 	return &clone, nil
 }
 
-func (s *memContactRepo) List(_ context.Context, offset, limit int) ([]model.Contact, int, error) {
+func (s *memContactRepo) List(_ context.Context, _ string, offset, limit int) ([]model.Contact, int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var all []model.Contact
@@ -129,7 +137,7 @@ func (s *memTemplateRepo) GetByID(_ context.Context, id int64) (*model.ScenarioT
 	return &clone, nil
 }
 
-func (s *memTemplateRepo) List(_ context.Context, offset, limit int) ([]model.ScenarioTemplate, int, error) {
+func (s *memTemplateRepo) List(_ context.Context, _ string, offset, limit int) ([]model.ScenarioTemplate, int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var all []model.ScenarioTemplate
@@ -227,7 +235,7 @@ func (s *memTaskRepo) GetByID(_ context.Context, id int64) (*model.CallTask, err
 	return &clone, nil
 }
 
-func (s *memTaskRepo) List(_ context.Context, offset, limit int) ([]model.CallTask, int, error) {
+func (s *memTaskRepo) List(_ context.Context, _ string, offset, limit int) ([]model.CallTask, int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var all []model.CallTask
@@ -297,7 +305,7 @@ func (s *memCallRepo) GetByID(_ context.Context, id int64) (*model.Call, error) 
 	return &clone, nil
 }
 
-func (s *memCallRepo) ListByTask(_ context.Context, taskID int64, offset, limit int) ([]model.Call, int, error) {
+func (s *memCallRepo) ListByTask(_ context.Context, _ string, taskID int64, offset, limit int) ([]model.Call, int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var filtered []model.Call
@@ -356,7 +364,7 @@ func (failContactRepo) Create(context.Context, *model.Contact) (int64, error) {
 func (failContactRepo) GetByID(context.Context, int64) (*model.Contact, error) {
 	return nil, errAlways
 }
-func (failContactRepo) List(context.Context, int, int) ([]model.Contact, int, error) {
+func (failContactRepo) List(context.Context, string, int, int) ([]model.Contact, int, error) {
 	return nil, 0, errAlways
 }
 func (failContactRepo) UpdateStatus(context.Context, int64, string) error { return errAlways }
@@ -370,7 +378,7 @@ type failCallRepo struct{}
 func (failCallRepo) GetByID(context.Context, int64) (*model.Call, error) {
 	return nil, errAlways
 }
-func (failCallRepo) ListByTask(context.Context, int64, int, int) ([]model.Call, int, error) {
+func (failCallRepo) ListByTask(context.Context, string, int64, int, int) ([]model.Call, int, error) {
 	return nil, 0, errAlways
 }
 func (failCallRepo) ListTurns(context.Context, int64) ([]model.DialogueTurn, error) {
@@ -384,7 +392,7 @@ func (failTaskRepo) Create(context.Context, *model.CallTask) (int64, error) { re
 func (failTaskRepo) GetByID(context.Context, int64) (*model.CallTask, error) {
 	return nil, errAlways
 }
-func (failTaskRepo) List(context.Context, int, int) ([]model.CallTask, int, error) {
+func (failTaskRepo) List(context.Context, string, int, int) ([]model.CallTask, int, error) {
 	return nil, 0, errAlways
 }
 func (failTaskRepo) Update(context.Context, *model.CallTask) error { return errAlways }
@@ -401,7 +409,7 @@ func (failTemplateRepo) Create(context.Context, *model.ScenarioTemplate) (int64,
 func (failTemplateRepo) GetByID(context.Context, int64) (*model.ScenarioTemplate, error) {
 	return nil, errAlways
 }
-func (failTemplateRepo) List(context.Context, int, int) ([]model.ScenarioTemplate, int, error) {
+func (failTemplateRepo) List(context.Context, string, int, int) ([]model.ScenarioTemplate, int, error) {
 	return nil, 0, errAlways
 }
 func (failTemplateRepo) Update(context.Context, *model.ScenarioTemplate) error { return errAlways }

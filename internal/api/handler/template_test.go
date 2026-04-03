@@ -46,7 +46,7 @@ func TestTemplateHandler_Create(t *testing.T) {
 
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/templates", strings.NewReader(tt.body))
 			rec := httptest.NewRecorder()
-			mux.ServeHTTP(rec, req)
+			mux.ServeHTTP(rec, withTenantCtx(req))
 
 			assert.Equal(t, tt.wantStatus, rec.Code)
 
@@ -100,7 +100,7 @@ func TestTemplateHandler_GetByID(t *testing.T) {
 
 			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
 			rec := httptest.NewRecorder()
-			mux.ServeHTTP(rec, req)
+			mux.ServeHTTP(rec, withTenantCtx(req))
 
 			assert.Equal(t, tt.wantStatus, rec.Code)
 		})
@@ -117,7 +117,7 @@ func TestTemplateHandler_List(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/templates", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -169,7 +169,7 @@ func TestTemplateHandler_Update(t *testing.T) {
 
 			req := httptest.NewRequest(http.MethodPut, tt.path, strings.NewReader(tt.body))
 			rec := httptest.NewRecorder()
-			mux.ServeHTTP(rec, req)
+			mux.ServeHTTP(rec, withTenantCtx(req))
 
 			assert.Equal(t, tt.wantStatus, rec.Code)
 		})
@@ -187,7 +187,7 @@ func TestTemplateHandler_UpdateStatus(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/templates/1/status",
 		strings.NewReader(`{"status":"active"}`))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 }
@@ -203,7 +203,7 @@ func TestTemplateHandler_UpdateStatus_EmptyStatus(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/templates/1/status",
 		strings.NewReader(`{"status":""}`))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
@@ -241,7 +241,7 @@ func TestTemplateHandler_Publish(t *testing.T) {
 
 			req := httptest.NewRequest(http.MethodPost, tt.path, nil)
 			rec := httptest.NewRecorder()
-			mux.ServeHTTP(rec, req)
+			mux.ServeHTTP(rec, withTenantCtx(req))
 
 			assert.Equal(t, tt.wantStatus, rec.Code)
 
@@ -266,13 +266,13 @@ func TestTemplateHandler_GetSnapshot(t *testing.T) {
 
 	pubReq := httptest.NewRequest(http.MethodPost, "/api/v1/templates/1/publish", nil)
 	pubRec := httptest.NewRecorder()
-	mux.ServeHTTP(pubRec, pubReq)
+	mux.ServeHTTP(pubRec, withTenantCtx(pubReq))
 	require.Equal(t, http.StatusCreated, pubRec.Code)
 
 	// Now get the snapshot.
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/templates/snapshots/1", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -289,7 +289,7 @@ func TestTemplateHandler_GetSnapshot_NotFound(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/templates/snapshots/999", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusNotFound, rec.Code)
 }
@@ -302,7 +302,7 @@ func TestTemplateHandler_List_ServiceError(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/templates", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
@@ -315,7 +315,7 @@ func TestTemplateHandler_GetByID_ServiceError(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/templates/1", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
@@ -329,7 +329,7 @@ func TestTemplateHandler_Create_ServiceError(t *testing.T) {
 	body := `{"name":"Template"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/templates", strings.NewReader(body))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
@@ -343,7 +343,7 @@ func TestTemplateHandler_UpdateStatus_InvalidID(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/templates/abc/status",
 		strings.NewReader(`{"status":"active"}`))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
@@ -358,7 +358,7 @@ func TestTemplateHandler_UpdateStatus_InvalidJSON(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/templates/1/status",
 		strings.NewReader(`{bad`))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
@@ -372,7 +372,7 @@ func TestTemplateHandler_UpdateStatus_ServiceError(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/templates/999/status",
 		strings.NewReader(`{"status":"active"}`))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
@@ -386,7 +386,7 @@ func TestTemplateHandler_Update_InvalidID(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/templates/abc",
 		strings.NewReader(`{"name":"Updated"}`))
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
@@ -399,7 +399,7 @@ func TestTemplateHandler_Publish_InvalidID(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/templates/abc/publish", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
@@ -412,7 +412,7 @@ func TestTemplateHandler_Publish_ServiceError(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/templates/1/publish", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
@@ -425,7 +425,7 @@ func TestTemplateHandler_GetSnapshot_InvalidID(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/templates/snapshots/abc", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
@@ -438,7 +438,7 @@ func TestTemplateHandler_GetSnapshot_ServiceError(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/templates/snapshots/1", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }

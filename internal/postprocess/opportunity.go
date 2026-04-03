@@ -15,6 +15,7 @@ import (
 
 // Opportunity 表示从通话中提取的结构化商机信息。
 type Opportunity struct {
+	TenantID         string     `json:"tenant_id"`
 	CallID           int64      `json:"call_id"`
 	ContactID        int64      `json:"contact_id"`
 	TaskID           int64      `json:"task_id"`

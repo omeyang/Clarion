@@ -146,9 +146,27 @@ func (c *ESLClient) authenticate() error {
 }
 
 // subscribeEvents 订阅 FreeSWITCH 事件。
+// 只订阅呼叫相关事件，避免 HEARTBEAT、RE_SCHEDULE 等无关事件淹没通道。
 // readLoop 尚未启动，直接从 TCP 连接读取。
 func (c *ESLClient) subscribeEvents() error {
-	if _, err := fmt.Fprintf(c.conn, "event plain ALL\n\n"); err != nil {
+	// 只订阅呼叫流程必需的事件类型。
+	events := strings.Join([]string{
+		"CHANNEL_CREATE",
+		"CHANNEL_PROGRESS",
+		"CHANNEL_ANSWER",
+		"CHANNEL_HANGUP",
+		"CHANNEL_HANGUP_COMPLETE",
+		"CHANNEL_DESTROY",
+		"CHANNEL_STATE",
+		"CHANNEL_CALLSTATE",
+		"BACKGROUND_JOB",
+		"PLAYBACK_START",
+		"PLAYBACK_STOP",
+		"DETECTED_SPEECH",
+		"CUSTOM",
+		"CODEC",
+	}, " ")
+	if _, err := fmt.Fprintf(c.conn, "event plain %s\n\n", events); err != nil {
 		return fmt.Errorf("subscribe write: %w", err)
 	}
 

@@ -69,6 +69,7 @@ type Worker struct {
 	wsServer       *http.Server
 	snapshotStore  SnapshotStore
 	speechDetector SpeechDetector
+	eslDispatcher  *eslDispatcher
 
 	// schedulerClient 用于入队恢复任务。
 	schedulerClient *scheduler.Client
@@ -133,6 +134,10 @@ func (w *Worker) Run(ctx context.Context) error {
 			w.logger.Warn("close ESL connection", slog.String("error", err.Error()))
 		}
 	}()
+
+	// 启动 ESL 事件分发器，按 session_id 路由事件到各 Session。
+	w.eslDispatcher = newESLDispatcher(w.logger)
+	go w.eslDispatcher.run(w.esl.Events())
 
 	// 启动音频 WebSocket 服务器。
 	w.startWSServer()
@@ -237,6 +242,10 @@ func (w *Worker) executeTask(ctx context.Context, task Task) {
 	w.audioLinks[sessionID] = link
 
 	sessionCfg := w.buildSessionConfig(task, sessionID, audioIn, audioOut)
+	// 通过 dispatcher 分配 Session 专属 ESL 事件通道。
+	if w.eslDispatcher != nil {
+		sessionCfg.ESLEvents = w.eslDispatcher.register(sessionID)
+	}
 	w.attachDialogueEngine(&sessionCfg)
 	w.attachHybridProviders(&sessionCfg)
 	w.attachInputFilter(&sessionCfg)
@@ -248,6 +257,10 @@ func (w *Worker) executeTask(ctx context.Context, task Task) {
 	w.mu.Unlock()
 
 	defer func() {
+		// 注销 Session 的事件通道。
+		if w.eslDispatcher != nil {
+			w.eslDispatcher.unregister(sessionID)
+		}
 		w.mu.Lock()
 		delete(w.sessions, sessionID)
 		delete(w.audioLinks, sessionID)

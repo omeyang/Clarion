@@ -30,12 +30,12 @@ func NewPgTaskStore(pool PoolQuerier) *PgTaskStore {
 func (s *PgTaskStore) Create(ctx context.Context, t *model.CallTask) (int64, error) {
 	var id int64
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO call_tasks (name, scenario_template_id, template_snapshot_id,
+		`INSERT INTO call_tasks (tenant_id, name, scenario_template_id, template_snapshot_id,
 		 contact_filter, schedule_config, daily_limit, max_concurrent, status,
 		 total_contacts, completed_contacts)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		 RETURNING id`,
-		t.Name, t.ScenarioTemplateID, t.TemplateSnapshotID,
+		t.TenantID, t.Name, t.ScenarioTemplateID, t.TemplateSnapshotID,
 		t.ContactFilter, t.ScheduleConfig, t.DailyLimit, t.MaxConcurrent,
 		t.Status, t.TotalContacts, t.CompletedContacts,
 	).Scan(&id)
@@ -49,11 +49,11 @@ func (s *PgTaskStore) Create(ctx context.Context, t *model.CallTask) (int64, err
 func (s *PgTaskStore) GetByID(ctx context.Context, id int64) (*model.CallTask, error) {
 	t := &model.CallTask{}
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, name, scenario_template_id, template_snapshot_id,
+		`SELECT id, tenant_id, name, scenario_template_id, template_snapshot_id,
 		 contact_filter, schedule_config, daily_limit, max_concurrent,
 		 status, total_contacts, completed_contacts, created_at, updated_at
 		 FROM call_tasks WHERE id = $1`, id,
-	).Scan(&t.ID, &t.Name, &t.ScenarioTemplateID, &t.TemplateSnapshotID,
+	).Scan(&t.ID, &t.TenantID, &t.Name, &t.ScenarioTemplateID, &t.TemplateSnapshotID,
 		&t.ContactFilter, &t.ScheduleConfig, &t.DailyLimit, &t.MaxConcurrent,
 		&t.Status, &t.TotalContacts, &t.CompletedContacts, &t.CreatedAt, &t.UpdatedAt)
 	if err != nil {
@@ -65,19 +65,20 @@ func (s *PgTaskStore) GetByID(ctx context.Context, id int64) (*model.CallTask, e
 	return t, nil
 }
 
-// List 返回分页的外呼任务列表及总数。
-func (s *PgTaskStore) List(ctx context.Context, offset, limit int) ([]model.CallTask, int, error) {
+// List 返回指定租户的分页外呼任务列表及总数。
+func (s *PgTaskStore) List(ctx context.Context, tenantID string, offset, limit int) ([]model.CallTask, int, error) {
 	var total int
-	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM call_tasks`).Scan(&total)
+	err := s.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM call_tasks WHERE tenant_id = $1`, tenantID).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("count tasks: %w", err)
 	}
 
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, name, scenario_template_id, template_snapshot_id,
+		`SELECT id, tenant_id, name, scenario_template_id, template_snapshot_id,
 		 contact_filter, schedule_config, daily_limit, max_concurrent,
 		 status, total_contacts, completed_contacts, created_at, updated_at
-		 FROM call_tasks ORDER BY id LIMIT $1 OFFSET $2`, limit, offset)
+		 FROM call_tasks WHERE tenant_id = $1 ORDER BY id LIMIT $2 OFFSET $3`, tenantID, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list tasks: %w", err)
 	}
@@ -86,7 +87,7 @@ func (s *PgTaskStore) List(ctx context.Context, offset, limit int) ([]model.Call
 	var tasks []model.CallTask
 	for rows.Next() {
 		var t model.CallTask
-		if err := rows.Scan(&t.ID, &t.Name, &t.ScenarioTemplateID, &t.TemplateSnapshotID,
+		if err := rows.Scan(&t.ID, &t.TenantID, &t.Name, &t.ScenarioTemplateID, &t.TemplateSnapshotID,
 			&t.ContactFilter, &t.ScheduleConfig, &t.DailyLimit, &t.MaxConcurrent,
 			&t.Status, &t.TotalContacts, &t.CompletedContacts, &t.CreatedAt, &t.UpdatedAt); err != nil {
 			return nil, 0, fmt.Errorf("scan task: %w", err)

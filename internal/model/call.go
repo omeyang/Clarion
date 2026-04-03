@@ -10,6 +10,7 @@ import (
 // Call 表示单条通话记录。
 type Call struct {
 	ID                 int64             `json:"id"`
+	TenantID           string            `json:"tenant_id"`
 	ContactID          int64             `json:"contact_id"`
 	TaskID             int64             `json:"task_id"`
 	TemplateSnapshotID *int64            `json:"template_snapshot_id"`

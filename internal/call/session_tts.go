@@ -268,7 +268,8 @@ func (s *Session) prefetchSegments(ttsCtx context.Context, sentenceCh <-chan str
 }
 
 // playSegment 将一段 PCM 音频降采样并播放。
-// 优先使用直接帧发送（避免文件 I/O），ESL 路径作为退回方案。
+// FreeSWITCH 场景下必须通过 ESL 文件播放（AudioOut 方向不支持注入播放音频）；
+// 非 ESL 场景（APP WebSocket 等）使用 AudioOut 直接帧发送。
 func (s *Session) playSegment(ttsCtx context.Context, rawPCM []byte) {
 	downsampled := pcm.Resample16to8(rawPCM)
 	if downsampled == nil {
@@ -276,22 +277,26 @@ func (s *Session) playSegment(ttsCtx context.Context, rawPCM []byte) {
 		return
 	}
 
-	// 优先使用 AudioOut 直接帧发送（避免临时文件 I/O）。
+	// FreeSWITCH 场景：通过 ESL uuid_broadcast 播放文件。
+	// mod_audio_fork 只负责 FreeSWITCH→Worker 方向（接收用户音频），
+	// 反向通过 AudioOut 发帧无法送达用户，必须走 ESL 播放。
+	if s.cfg.ESL != nil && s.channelUUID != "" {
+		tmpPath, err := s.writeWAVFile(downsampled)
+		if err != nil {
+			s.logger.Error("写入 WAV 文件失败", slog.String("error", err.Error()))
+			return
+		}
+		defer s.removeFile(tmpPath)
+		if s.playViaESL(ttsCtx, tmpPath, len(downsampled)) {
+			s.waitPlayback(ttsCtx, len(downsampled), 100)
+		}
+		return
+	}
+
+	// 非 ESL 场景（APP WebSocket 等）：直接帧发送。
 	if s.cfg.AudioOut != nil {
 		s.playViaAudioOutPaced(ttsCtx, downsampled)
 		return
-	}
-
-	// 退回到 ESL 文件路径。
-	tmpPath, err := s.writeWAVFile(downsampled)
-	if err != nil {
-		s.logger.Error("写入 WAV 文件失败", slog.String("error", err.Error()))
-		return
-	}
-	defer s.removeFile(tmpPath)
-
-	if s.playViaESL(ttsCtx, tmpPath, len(downsampled)) {
-		s.waitPlayback(ttsCtx, len(downsampled), 100)
 	}
 }
 

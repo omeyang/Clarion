@@ -45,6 +45,21 @@
     <param name="apply-nat-acl" value="rfc1918.auto"/>
     <param name="NDLB-received-in-nat-reg-contact" value="true"/>
 
+    <!--
+      NAT 保活：定期向 NAT 后的客户端发送 OPTIONS ping。
+      - 保持 NAT 端口映射存活，防止运营商/路由器超时丢弃
+      - FreeSWITCH 重启后，客户端收到 OPTIONS 会触发重注册
+    -->
+    <param name="nat-options-ping" value="true"/>
+    <param name="nat-options-ping-period" value="30"/>
+
+    <!--
+      缩短注册有效期：客户端每 60 秒刷新注册。
+      FreeSWITCH 重启后最多 60 秒客户端会自动重注册，无需手动操作。
+    -->
+    <param name="sip-register-min-expires" value="60"/>
+    <param name="sip-register-max-expires" value="120"/>
+
     <!-- 不管理 presence（简化） -->
     <param name="manage-presence" value="false"/>
   </settings>

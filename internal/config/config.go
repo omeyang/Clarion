@@ -45,6 +45,15 @@ type Config struct {
 	Snapshot       Snapshot       `toml:"snapshot"        koanf:"snapshot"`
 	SileroVAD      SileroVAD      `toml:"silero_vad"      koanf:"silero_vad"`
 	Observe        Observe        `toml:"observe"         koanf:"observe"`
+	Auth           Auth           `toml:"auth"            koanf:"auth"`
+}
+
+// Auth 配置认证体系。
+type Auth struct {
+	// JWTSecret 是 JWT 签名密钥，必须通过环境变量 CLARION_AUTH_JWT_SECRET 注入。
+	JWTSecret string `toml:"jwt_secret" koanf:"jwt_secret"`
+	// TokenTTL 是 JWT 有效期，默认 15 分钟。
+	TokenTTL time.Duration `toml:"token_ttl" koanf:"token_ttl"`
 }
 
 // Observe 配置可观测性功能。
@@ -407,6 +416,9 @@ func Defaults() Config {
 			AudioWSHost: "127.0.0.1",
 		},
 	}
+	cfg.Auth = Auth{
+		TokenTTL: 15 * time.Minute,
+	}
 	cfg.setCallDefaults()
 	return cfg
 }
@@ -514,7 +526,7 @@ var knownSections = []string{
 	"freeswitch", "database", "smart_llm", "realtime",
 	"local_asr", "local_tts", "silero_vad", "observe",
 	"pipeline", "scheduler", "snapshot", "budget", "server", "worker",
-	"off_topic", "guard", "redis", "asr", "llm", "tts", "amd", "oss",
+	"off_topic", "guard", "redis", "auth", "asr", "llm", "tts", "amd", "oss",
 }
 
 // Load 从给定的 TOML 文件路径读取配置，然后应用环境变量覆盖。

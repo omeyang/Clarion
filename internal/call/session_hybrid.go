@@ -37,8 +37,9 @@ func (s *Session) eventLoopHybrid(ctx context.Context) error {
 	silenceTimer := time.NewTimer(time.Duration(s.cfg.Protection.FirstSilenceTimeoutSec) * time.Second)
 	defer silenceTimer.Stop()
 
-	var eslEvents <-chan ESLEvent
-	if s.cfg.ESL != nil {
+	// 优先使用 dispatcher 分配的专属通道，回退到全局 ESL 通道（兼容测试）。
+	eslEvents := s.cfg.ESLEvents
+	if eslEvents == nil && s.cfg.ESL != nil {
 		eslEvents = s.cfg.ESL.Events()
 	}
 

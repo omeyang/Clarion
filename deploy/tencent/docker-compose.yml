@@ -79,6 +79,9 @@ services:
       - ./clarion.toml:/etc/clarion/clarion.toml:ro
       - /tmp/clarion-audio:/tmp/clarion-audio
       - /etc/pki/tls/certs/ca-bundle.crt:/etc/ssl/certs/ca-certificates.crt:ro
+      - ./lib/libsherpa-onnx-c-api.so:/usr/lib/libsherpa-onnx-c-api.so:ro
+      - ./lib/libonnxruntime.so:/usr/lib/libonnxruntime.so:ro
+      - ./lib/libsherpa-onnx-cxx-api.so:/usr/lib/libsherpa-onnx-cxx-api.so:ro
     env_file:
       - .env
     command: ["clarion-worker", "-c", "/etc/clarion/clarion.toml"]

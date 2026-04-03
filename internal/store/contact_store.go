@@ -29,10 +29,10 @@ func NewPgContactStore(pool PoolQuerier) *PgContactStore {
 func (s *PgContactStore) Create(ctx context.Context, c *model.Contact) (int64, error) {
 	var id int64
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO contacts (phone_masked, phone_hash, source, profile_json, current_status, do_not_call)
-		 VALUES ($1, $2, $3, $4, $5, $6)
+		`INSERT INTO contacts (tenant_id, phone_masked, phone_hash, source, profile_json, current_status, do_not_call)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 RETURNING id`,
-		c.PhoneMasked, c.PhoneHash, c.Source, c.ProfileJSON, c.CurrentStatus, c.DoNotCall,
+		c.TenantID, c.PhoneMasked, c.PhoneHash, c.Source, c.ProfileJSON, c.CurrentStatus, c.DoNotCall,
 	).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("create contact: %w", err)
@@ -44,9 +44,9 @@ func (s *PgContactStore) Create(ctx context.Context, c *model.Contact) (int64, e
 func (s *PgContactStore) GetByID(ctx context.Context, id int64) (*model.Contact, error) {
 	c := &model.Contact{}
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, phone_masked, phone_hash, source, profile_json, current_status, do_not_call, created_at, updated_at
+		`SELECT id, tenant_id, phone_masked, phone_hash, source, profile_json, current_status, do_not_call, created_at, updated_at
 		 FROM contacts WHERE id = $1`, id,
-	).Scan(&c.ID, &c.PhoneMasked, &c.PhoneHash, &c.Source, &c.ProfileJSON,
+	).Scan(&c.ID, &c.TenantID, &c.PhoneMasked, &c.PhoneHash, &c.Source, &c.ProfileJSON,
 		&c.CurrentStatus, &c.DoNotCall, &c.CreatedAt, &c.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -57,17 +57,18 @@ func (s *PgContactStore) GetByID(ctx context.Context, id int64) (*model.Contact,
 	return c, nil
 }
 
-// List 返回分页的联系人列表及总数。
-func (s *PgContactStore) List(ctx context.Context, offset, limit int) ([]model.Contact, int, error) {
+// List 返回指定租户的分页联系人列表及总数。
+func (s *PgContactStore) List(ctx context.Context, tenantID string, offset, limit int) ([]model.Contact, int, error) {
 	var total int
-	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM contacts`).Scan(&total)
+	err := s.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM contacts WHERE tenant_id = $1`, tenantID).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("count contacts: %w", err)
 	}
 
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, phone_masked, phone_hash, source, profile_json, current_status, do_not_call, created_at, updated_at
-		 FROM contacts ORDER BY id LIMIT $1 OFFSET $2`, limit, offset)
+		`SELECT id, tenant_id, phone_masked, phone_hash, source, profile_json, current_status, do_not_call, created_at, updated_at
+		 FROM contacts WHERE tenant_id = $1 ORDER BY id LIMIT $2 OFFSET $3`, tenantID, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list contacts: %w", err)
 	}
@@ -76,7 +77,7 @@ func (s *PgContactStore) List(ctx context.Context, offset, limit int) ([]model.C
 	var contacts []model.Contact
 	for rows.Next() {
 		var c model.Contact
-		if err := rows.Scan(&c.ID, &c.PhoneMasked, &c.PhoneHash, &c.Source, &c.ProfileJSON,
+		if err := rows.Scan(&c.ID, &c.TenantID, &c.PhoneMasked, &c.PhoneHash, &c.Source, &c.ProfileJSON,
 			&c.CurrentStatus, &c.DoNotCall, &c.CreatedAt, &c.UpdatedAt); err != nil {
 			return nil, 0, fmt.Errorf("scan contact: %w", err)
 		}
@@ -103,15 +104,15 @@ func (s *PgContactStore) UpdateStatus(ctx context.Context, id int64, status stri
 	return nil
 }
 
-// BulkCreate 批量插入联系人，根据手机号哈希跳过重复项。
+// BulkCreate 批量插入联系人，根据租户+手机号哈希跳过重复项。
 func (s *PgContactStore) BulkCreate(ctx context.Context, contacts []model.Contact) (inserted int, err error) {
 	batch := &pgx.Batch{}
 	for _, c := range contacts {
 		batch.Queue(
-			`INSERT INTO contacts (phone_masked, phone_hash, source, profile_json, current_status, do_not_call)
-			 VALUES ($1, $2, $3, $4, $5, $6)
-			 ON CONFLICT (phone_hash) DO NOTHING`,
-			c.PhoneMasked, c.PhoneHash, c.Source, c.ProfileJSON, c.CurrentStatus, c.DoNotCall,
+			`INSERT INTO contacts (tenant_id, phone_masked, phone_hash, source, profile_json, current_status, do_not_call)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7)
+			 ON CONFLICT (tenant_id, phone_hash) DO NOTHING`,
+			c.TenantID, c.PhoneMasked, c.PhoneHash, c.Source, c.ProfileJSON, c.CurrentStatus, c.DoNotCall,
 		)
 	}
 

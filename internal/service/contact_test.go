@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/omeyang/clarion/internal/model"
+	"github.com/omeyang/xkit/pkg/context/xtenant"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,7 +15,7 @@ import (
 type mockContactRepo struct {
 	create       func(ctx context.Context, c *model.Contact) (int64, error)
 	getByID      func(ctx context.Context, id int64) (*model.Contact, error)
-	list         func(ctx context.Context, offset, limit int) ([]model.Contact, int, error)
+	list         func(ctx context.Context, tenantID string, offset, limit int) ([]model.Contact, int, error)
 	updateStatus func(ctx context.Context, id int64, status string) error
 	bulkCreate   func(ctx context.Context, contacts []model.Contact) (int, error)
 }
@@ -27,8 +28,8 @@ func (m *mockContactRepo) GetByID(ctx context.Context, id int64) (*model.Contact
 	return m.getByID(ctx, id)
 }
 
-func (m *mockContactRepo) List(ctx context.Context, offset, limit int) ([]model.Contact, int, error) {
-	return m.list(ctx, offset, limit)
+func (m *mockContactRepo) List(ctx context.Context, tenantID string, offset, limit int) ([]model.Contact, int, error) {
+	return m.list(ctx, tenantID, offset, limit)
 }
 
 func (m *mockContactRepo) UpdateStatus(ctx context.Context, id int64, status string) error {
@@ -73,7 +74,8 @@ func TestContactSvc_Create(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewContactSvc(tt.repo)
-			id, err := svc.Create(context.Background(), tt.contact)
+			ctx, _ := xtenant.WithTenantID(context.Background(), "test-tenant")
+			id, err := svc.Create(ctx, tt.contact)
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "创建联系人")
@@ -146,7 +148,7 @@ func TestContactSvc_List(t *testing.T) {
 			offset: 0,
 			limit:  10,
 			repo: &mockContactRepo{
-				list: func(_ context.Context, _, _ int) ([]model.Contact, int, error) {
+				list: func(_ context.Context, _ string, _, _ int) ([]model.Contact, int, error) {
 					return []model.Contact{{ID: 1}, {ID: 2}}, 5, nil
 				},
 			},
@@ -156,7 +158,7 @@ func TestContactSvc_List(t *testing.T) {
 		{
 			name: "仓库返回错误时包装错误信息",
 			repo: &mockContactRepo{
-				list: func(_ context.Context, _, _ int) ([]model.Contact, int, error) {
+				list: func(_ context.Context, _ string, _, _ int) ([]model.Contact, int, error) {
 					return nil, 0, errors.New("db error")
 				},
 			},
@@ -167,7 +169,8 @@ func TestContactSvc_List(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewContactSvc(tt.repo)
-			contacts, total, err := svc.List(context.Background(), tt.offset, tt.limit)
+			ctx, _ := xtenant.WithTenantID(context.Background(), "test-tenant")
+			contacts, total, err := svc.List(ctx, tt.offset, tt.limit)
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "列出联系人")
@@ -267,7 +270,8 @@ func TestContactSvc_BulkCreate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewContactSvc(tt.repo)
-			n, err := svc.BulkCreate(context.Background(), tt.contacts)
+			ctx, _ := xtenant.WithTenantID(context.Background(), "test-tenant")
+			n, err := svc.BulkCreate(ctx, tt.contacts)
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "批量创建联系人")

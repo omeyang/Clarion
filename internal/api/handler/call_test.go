@@ -56,7 +56,7 @@ func TestCallHandler_ListByTask(t *testing.T) {
 
 			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
 			rec := httptest.NewRecorder()
-			mux.ServeHTTP(rec, req)
+			mux.ServeHTTP(rec, withTenantCtx(req))
 
 			assert.Equal(t, tt.wantStatus, rec.Code)
 
@@ -108,7 +108,7 @@ func TestCallHandler_GetByID(t *testing.T) {
 
 			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
 			rec := httptest.NewRecorder()
-			mux.ServeHTTP(rec, req)
+			mux.ServeHTTP(rec, withTenantCtx(req))
 
 			assert.Equal(t, tt.wantStatus, rec.Code)
 
@@ -145,7 +145,7 @@ func TestCallHandler_GetDetail(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/calls/1/detail", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -165,7 +165,7 @@ func TestCallHandler_GetDetail_NotFound(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/calls/999/detail", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusNotFound, rec.Code)
 }
@@ -180,7 +180,7 @@ func TestCallHandler_GetDetail_NoTurns(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/calls/1/detail", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -198,7 +198,7 @@ func TestCallHandler_ListByTask_ServiceError(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/1/calls", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
@@ -211,7 +211,7 @@ func TestCallHandler_GetByID_ServiceError(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/calls/1", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
@@ -224,7 +224,7 @@ func TestCallHandler_GetDetail_ServiceError(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/calls/1/detail", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
@@ -237,7 +237,7 @@ func TestCallHandler_GetDetail_InvalidID(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/calls/abc/detail", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
@@ -254,7 +254,7 @@ func TestCallHandler_GetDetail_ListTurnsError(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/calls/1/detail", nil)
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, withTenantCtx(req))
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }

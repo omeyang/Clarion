@@ -142,7 +142,7 @@ Go 在**开发效率**与**运行时性能**之间取得了最佳平衡，且有
 | **测试** | `testing` + `stretchr/testify` | 官方 + 社区最流行的断言库 |
 | **Lint** | `golangci-lint v2` | 集成 50+ linter 的元工具，严格模式 |
 | **音频处理** | Sonata `engine/pcm` | PCM 重采样、能量计算、WAV 编码、WebRTC VAD |
-| **UUID** | `google/uuid` | Google 官方实现 |
+| **UUID** | `gofrs/uuid/v5` | UUID v7 毫秒内单调递增，适合分布式 ID 生成 |
 
 ### 3.2 明确不用的库
 

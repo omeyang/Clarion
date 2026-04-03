@@ -19,7 +19,7 @@ go build -ldflags="-s -w" -o bin/clarion-worker ./cmd/worker
 go build -ldflags="-s -w" -o bin/clarion-postprocessor ./cmd/postprocessor
 
 echo "=== 同步文件到远程服务器 ==="
-ssh "$REMOTE" "mkdir -p $REMOTE_DIR/{bin,migrations,freeswitch}"
+ssh "$REMOTE" "mkdir -p $REMOTE_DIR/{bin,lib,migrations,freeswitch}"
 
 # 二进制文件
 rsync -avz --progress bin/clarion bin/clarion-worker bin/clarion-postprocessor "$REMOTE:$REMOTE_DIR/bin/"
@@ -28,11 +28,17 @@ rsync -avz --progress bin/clarion bin/clarion-worker bin/clarion-postprocessor "
 rsync -avz "$DEPLOY_DIR/docker-compose.yml" "$REMOTE:$REMOTE_DIR/"
 rsync -avz "$DEPLOY_DIR/clarion.toml" "$REMOTE:$REMOTE_DIR/"
 
-# 数据库迁移
-rsync -avz "$PROJECT_ROOT/migrations/" "$REMOTE:$REMOTE_DIR/migrations/"
+# 数据库迁移（源目录为 schema/）
+rsync -avz "$PROJECT_ROOT/schema/" "$REMOTE:$REMOTE_DIR/migrations/"
 
 # FreeSWITCH 配置
 rsync -avz "$PROJECT_ROOT/deploy/local/freeswitch/conf/" "$REMOTE:$REMOTE_DIR/freeswitch/conf/"
+
+# sherpa-onnx 共享库（worker CGO 依赖）
+SHERPA_LIB="$(go env GOPATH)/pkg/mod/github.com/k2-fsa/sherpa-onnx-go-linux@v1.12.29/lib/x86_64-unknown-linux-gnu"
+if [ -d "$SHERPA_LIB" ]; then
+    rsync -avz "$SHERPA_LIB/" "$REMOTE:$REMOTE_DIR/lib/"
+fi
 
 # .env 文件（如果本地有的话）
 if [ -f "$PROJECT_ROOT/.env" ]; then

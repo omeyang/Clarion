@@ -7,15 +7,22 @@ import (
 
 	"github.com/omeyang/clarion/internal/engine"
 	"github.com/omeyang/clarion/internal/model"
+	"github.com/omeyang/xkit/pkg/context/xtenant"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// tenantCtx 创建包含租户 ID 的测试上下文。
+func tenantCtx() context.Context {
+	ctx, _ := xtenant.WithTenantID(context.Background(), "test-tenant")
+	return ctx
+}
 
 // mockTaskRepo 是 TaskRepo 的测试替身。
 type mockTaskRepo struct {
 	create       func(ctx context.Context, t *model.CallTask) (int64, error)
 	getByID      func(ctx context.Context, id int64) (*model.CallTask, error)
-	list         func(ctx context.Context, offset, limit int) ([]model.CallTask, int, error)
+	list         func(ctx context.Context, tenantID string, offset, limit int) ([]model.CallTask, int, error)
 	update       func(ctx context.Context, t *model.CallTask) error
 	updateStatus func(ctx context.Context, id int64, status engine.TaskStatus) error
 }
@@ -28,8 +35,8 @@ func (m *mockTaskRepo) GetByID(ctx context.Context, id int64) (*model.CallTask, 
 	return m.getByID(ctx, id)
 }
 
-func (m *mockTaskRepo) List(ctx context.Context, offset, limit int) ([]model.CallTask, int, error) {
-	return m.list(ctx, offset, limit)
+func (m *mockTaskRepo) List(ctx context.Context, tenantID string, offset, limit int) ([]model.CallTask, int, error) {
+	return m.list(ctx, tenantID, offset, limit)
 }
 
 func (m *mockTaskRepo) Update(ctx context.Context, t *model.CallTask) error {
@@ -98,7 +105,7 @@ func TestTaskSvc_Create(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewTaskSvc(tt.repo)
-			id, err := svc.Create(context.Background(), tt.task)
+			id, err := svc.Create(tenantCtx(), tt.task)
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "创建任务")
@@ -145,7 +152,7 @@ func TestTaskSvc_GetByID(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewTaskSvc(tt.repo)
-			got, err := svc.GetByID(context.Background(), tt.id)
+			got, err := svc.GetByID(tenantCtx(), tt.id)
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "获取任务")
@@ -172,7 +179,7 @@ func TestTaskSvc_List(t *testing.T) {
 			offset: 0,
 			limit:  10,
 			repo: &mockTaskRepo{
-				list: func(_ context.Context, _, _ int) ([]model.CallTask, int, error) {
+				list: func(_ context.Context, _ string, _, _ int) ([]model.CallTask, int, error) {
 					return []model.CallTask{{ID: 1}}, 1, nil
 				},
 			},
@@ -182,7 +189,7 @@ func TestTaskSvc_List(t *testing.T) {
 		{
 			name: "仓库返回错误时包装错误信息",
 			repo: &mockTaskRepo{
-				list: func(_ context.Context, _, _ int) ([]model.CallTask, int, error) {
+				list: func(_ context.Context, _ string, _, _ int) ([]model.CallTask, int, error) {
 					return nil, 0, errors.New("db error")
 				},
 			},
@@ -193,7 +200,7 @@ func TestTaskSvc_List(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewTaskSvc(tt.repo)
-			tasks, total, err := svc.List(context.Background(), tt.offset, tt.limit)
+			tasks, total, err := svc.List(tenantCtx(), tt.offset, tt.limit)
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "列出任务")
@@ -237,7 +244,7 @@ func TestTaskSvc_Update(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewTaskSvc(tt.repo)
-			err := svc.Update(context.Background(), tt.task)
+			err := svc.Update(tenantCtx(), tt.task)
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "更新任务")
@@ -284,7 +291,7 @@ func TestTaskSvc_UpdateStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewTaskSvc(tt.repo)
-			err := svc.UpdateStatus(context.Background(), tt.id, tt.status)
+			err := svc.UpdateStatus(tenantCtx(), tt.id, tt.status)
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "更新任务")
@@ -328,7 +335,7 @@ func TestTaskSvc_Start(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewTaskSvc(tt.repo)
-			err := svc.Start(context.Background(), tt.id)
+			err := svc.Start(tenantCtx(), tt.id)
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "启动任务")
@@ -371,7 +378,7 @@ func TestTaskSvc_Pause(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewTaskSvc(tt.repo)
-			err := svc.Pause(context.Background(), tt.id)
+			err := svc.Pause(tenantCtx(), tt.id)
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "暂停任务")
@@ -414,7 +421,7 @@ func TestTaskSvc_Cancel(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewTaskSvc(tt.repo)
-			err := svc.Cancel(context.Background(), tt.id)
+			err := svc.Cancel(tenantCtx(), tt.id)
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "取消任务")

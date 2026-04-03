@@ -8,6 +8,7 @@ import (
 
 	"github.com/omeyang/clarion/internal/engine"
 	"github.com/omeyang/clarion/internal/model"
+	"github.com/omeyang/xkit/pkg/context/xtenant"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,7 +17,7 @@ import (
 type mockTemplateRepo struct {
 	create          func(ctx context.Context, t *model.ScenarioTemplate) (int64, error)
 	getByID         func(ctx context.Context, id int64) (*model.ScenarioTemplate, error)
-	list            func(ctx context.Context, offset, limit int) ([]model.ScenarioTemplate, int, error)
+	list            func(ctx context.Context, tenantID string, offset, limit int) ([]model.ScenarioTemplate, int, error)
 	update          func(ctx context.Context, t *model.ScenarioTemplate) error
 	updateStatus    func(ctx context.Context, id int64, status engine.TemplateStatus) error
 	createSnapshot  func(ctx context.Context, snap *model.TemplateSnapshot) (int64, error)
@@ -31,8 +32,8 @@ func (m *mockTemplateRepo) GetByID(ctx context.Context, id int64) (*model.Scenar
 	return m.getByID(ctx, id)
 }
 
-func (m *mockTemplateRepo) List(ctx context.Context, offset, limit int) ([]model.ScenarioTemplate, int, error) {
-	return m.list(ctx, offset, limit)
+func (m *mockTemplateRepo) List(ctx context.Context, tenantID string, offset, limit int) ([]model.ScenarioTemplate, int, error) {
+	return m.list(ctx, tenantID, offset, limit)
 }
 
 func (m *mockTemplateRepo) Update(ctx context.Context, t *model.ScenarioTemplate) error {
@@ -90,7 +91,8 @@ func TestTemplateSvc_Create(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewTemplateSvc(tt.repo)
-			id, err := svc.Create(context.Background(), tt.tmpl)
+			ctx, _ := xtenant.WithTenantID(context.Background(), "test-tenant")
+			id, err := svc.Create(ctx, tt.tmpl)
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "创建模板")
@@ -164,7 +166,7 @@ func TestTemplateSvc_List(t *testing.T) {
 			offset: 0,
 			limit:  10,
 			repo: &mockTemplateRepo{
-				list: func(_ context.Context, _, _ int) ([]model.ScenarioTemplate, int, error) {
+				list: func(_ context.Context, _ string, _, _ int) ([]model.ScenarioTemplate, int, error) {
 					return []model.ScenarioTemplate{{ID: 1}, {ID: 2}}, 2, nil
 				},
 			},
@@ -174,7 +176,7 @@ func TestTemplateSvc_List(t *testing.T) {
 		{
 			name: "仓库返回错误时包装错误信息",
 			repo: &mockTemplateRepo{
-				list: func(_ context.Context, _, _ int) ([]model.ScenarioTemplate, int, error) {
+				list: func(_ context.Context, _ string, _, _ int) ([]model.ScenarioTemplate, int, error) {
 					return nil, 0, errors.New("db error")
 				},
 			},
@@ -185,7 +187,8 @@ func TestTemplateSvc_List(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewTemplateSvc(tt.repo)
-			templates, total, err := svc.List(context.Background(), tt.offset, tt.limit)
+			ctx, _ := xtenant.WithTenantID(context.Background(), "test-tenant")
+			templates, total, err := svc.List(ctx, tt.offset, tt.limit)
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "列出模板")

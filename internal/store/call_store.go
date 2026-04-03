@@ -29,12 +29,12 @@ func NewPgCallStore(pool PoolQuerier) *PgCallStore {
 func (s *PgCallStore) Create(ctx context.Context, c *model.Call) (int64, error) {
 	var id int64
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO calls (contact_id, task_id, template_snapshot_id, session_id,
+		`INSERT INTO calls (tenant_id, contact_id, task_id, template_snapshot_id, session_id,
 		 status, answer_type, duration, record_url, transcript, extracted_fields,
 		 result_grade, next_action, rule_trace, ai_summary)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		 RETURNING id`,
-		c.ContactID, c.TaskID, c.TemplateSnapshotID, c.SessionID,
+		c.TenantID, c.ContactID, c.TaskID, c.TemplateSnapshotID, c.SessionID,
 		c.Status, c.AnswerType, c.Duration, c.RecordURL, c.Transcript,
 		c.ExtractedFields, c.ResultGrade, c.NextAction, c.RuleTrace, c.AISummary,
 	).Scan(&id)
@@ -48,11 +48,11 @@ func (s *PgCallStore) Create(ctx context.Context, c *model.Call) (int64, error) 
 func (s *PgCallStore) GetByID(ctx context.Context, id int64) (*model.Call, error) {
 	c := &model.Call{}
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, contact_id, task_id, template_snapshot_id, session_id,
+		`SELECT id, tenant_id, contact_id, task_id, template_snapshot_id, session_id,
 		 status, answer_type, duration, record_url, transcript, extracted_fields,
 		 result_grade, next_action, rule_trace, ai_summary, created_at, updated_at
 		 FROM calls WHERE id = $1`, id,
-	).Scan(&c.ID, &c.ContactID, &c.TaskID, &c.TemplateSnapshotID, &c.SessionID,
+	).Scan(&c.ID, &c.TenantID, &c.ContactID, &c.TaskID, &c.TemplateSnapshotID, &c.SessionID,
 		&c.Status, &c.AnswerType, &c.Duration, &c.RecordURL, &c.Transcript,
 		&c.ExtractedFields, &c.ResultGrade, &c.NextAction, &c.RuleTrace,
 		&c.AISummary, &c.CreatedAt, &c.UpdatedAt)
@@ -65,21 +65,21 @@ func (s *PgCallStore) GetByID(ctx context.Context, id int64) (*model.Call, error
 	return c, nil
 }
 
-// ListByTask 返回指定任务的分页通话列表及总数。
-func (s *PgCallStore) ListByTask(ctx context.Context, taskID int64, offset, limit int) ([]model.Call, int, error) {
+// ListByTask 返回指定租户下指定任务的分页通话列表及总数。
+func (s *PgCallStore) ListByTask(ctx context.Context, tenantID string, taskID int64, offset, limit int) ([]model.Call, int, error) {
 	var total int
 	err := s.pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM calls WHERE task_id = $1`, taskID).Scan(&total)
+		`SELECT COUNT(*) FROM calls WHERE tenant_id = $1 AND task_id = $2`, tenantID, taskID).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("count calls: %w", err)
 	}
 
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, contact_id, task_id, template_snapshot_id, session_id,
+		`SELECT id, tenant_id, contact_id, task_id, template_snapshot_id, session_id,
 		 status, answer_type, duration, record_url, transcript, extracted_fields,
 		 result_grade, next_action, rule_trace, ai_summary, created_at, updated_at
-		 FROM calls WHERE task_id = $1 ORDER BY id LIMIT $2 OFFSET $3`,
-		taskID, limit, offset)
+		 FROM calls WHERE tenant_id = $1 AND task_id = $2 ORDER BY id LIMIT $3 OFFSET $4`,
+		tenantID, taskID, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list calls: %w", err)
 	}
@@ -88,7 +88,7 @@ func (s *PgCallStore) ListByTask(ctx context.Context, taskID int64, offset, limi
 	var calls []model.Call
 	for rows.Next() {
 		var c model.Call
-		if err := rows.Scan(&c.ID, &c.ContactID, &c.TaskID, &c.TemplateSnapshotID, &c.SessionID,
+		if err := rows.Scan(&c.ID, &c.TenantID, &c.ContactID, &c.TaskID, &c.TemplateSnapshotID, &c.SessionID,
 			&c.Status, &c.AnswerType, &c.Duration, &c.RecordURL, &c.Transcript,
 			&c.ExtractedFields, &c.ResultGrade, &c.NextAction, &c.RuleTrace,
 			&c.AISummary, &c.CreatedAt, &c.UpdatedAt); err != nil {

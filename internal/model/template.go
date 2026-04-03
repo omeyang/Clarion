@@ -10,6 +10,7 @@ import (
 // ScenarioTemplate 定义对话流程配置。
 type ScenarioTemplate struct {
 	ID                   int64                 `json:"id"`
+	TenantID             string                `json:"tenant_id"`
 	Name                 string                `json:"name"`
 	Domain               string                `json:"domain"`
 	OpeningScript        string                `json:"opening_script"`

@@ -30,12 +30,12 @@ func NewPgTemplateStore(pool PoolQuerier) *PgTemplateStore {
 func (s *PgTemplateStore) Create(ctx context.Context, t *model.ScenarioTemplate) (int64, error) {
 	var id int64
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO scenario_templates (name, domain, opening_script, state_machine_config,
+		`INSERT INTO scenario_templates (tenant_id, name, domain, opening_script, state_machine_config,
 		 extraction_schema, grading_rules, prompt_templates, notification_config,
 		 call_protection_config, precompiled_audios, status, version)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		 RETURNING id`,
-		t.Name, t.Domain, t.OpeningScript, t.StateMachineConfig,
+		t.TenantID, t.Name, t.Domain, t.OpeningScript, t.StateMachineConfig,
 		t.ExtractionSchema, t.GradingRules, t.PromptTemplates, t.NotificationConfig,
 		t.CallProtectionConfig, t.PrecompiledAudios, t.Status, t.Version,
 	).Scan(&id)
@@ -49,11 +49,11 @@ func (s *PgTemplateStore) Create(ctx context.Context, t *model.ScenarioTemplate)
 func (s *PgTemplateStore) GetByID(ctx context.Context, id int64) (*model.ScenarioTemplate, error) {
 	t := &model.ScenarioTemplate{}
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, name, domain, opening_script, state_machine_config,
+		`SELECT id, tenant_id, name, domain, opening_script, state_machine_config,
 		 extraction_schema, grading_rules, prompt_templates, notification_config,
 		 call_protection_config, precompiled_audios, status, version, created_at, updated_at
 		 FROM scenario_templates WHERE id = $1`, id,
-	).Scan(&t.ID, &t.Name, &t.Domain, &t.OpeningScript, &t.StateMachineConfig,
+	).Scan(&t.ID, &t.TenantID, &t.Name, &t.Domain, &t.OpeningScript, &t.StateMachineConfig,
 		&t.ExtractionSchema, &t.GradingRules, &t.PromptTemplates, &t.NotificationConfig,
 		&t.CallProtectionConfig, &t.PrecompiledAudios, &t.Status, &t.Version,
 		&t.CreatedAt, &t.UpdatedAt)
@@ -66,19 +66,20 @@ func (s *PgTemplateStore) GetByID(ctx context.Context, id int64) (*model.Scenari
 	return t, nil
 }
 
-// List 返回分页的场景模板列表及总数。
-func (s *PgTemplateStore) List(ctx context.Context, offset, limit int) ([]model.ScenarioTemplate, int, error) {
+// List 返回指定租户的分页场景模板列表及总数。
+func (s *PgTemplateStore) List(ctx context.Context, tenantID string, offset, limit int) ([]model.ScenarioTemplate, int, error) {
 	var total int
-	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM scenario_templates`).Scan(&total)
+	err := s.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM scenario_templates WHERE tenant_id = $1`, tenantID).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("count templates: %w", err)
 	}
 
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, name, domain, opening_script, state_machine_config,
+		`SELECT id, tenant_id, name, domain, opening_script, state_machine_config,
 		 extraction_schema, grading_rules, prompt_templates, notification_config,
 		 call_protection_config, precompiled_audios, status, version, created_at, updated_at
-		 FROM scenario_templates ORDER BY id LIMIT $1 OFFSET $2`, limit, offset)
+		 FROM scenario_templates WHERE tenant_id = $1 ORDER BY id LIMIT $2 OFFSET $3`, tenantID, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list templates: %w", err)
 	}
@@ -87,7 +88,7 @@ func (s *PgTemplateStore) List(ctx context.Context, offset, limit int) ([]model.
 	var templates []model.ScenarioTemplate
 	for rows.Next() {
 		var t model.ScenarioTemplate
-		if err := rows.Scan(&t.ID, &t.Name, &t.Domain, &t.OpeningScript, &t.StateMachineConfig,
+		if err := rows.Scan(&t.ID, &t.TenantID, &t.Name, &t.Domain, &t.OpeningScript, &t.StateMachineConfig,
 			&t.ExtractionSchema, &t.GradingRules, &t.PromptTemplates, &t.NotificationConfig,
 			&t.CallProtectionConfig, &t.PrecompiledAudios, &t.Status, &t.Version,
 			&t.CreatedAt, &t.UpdatedAt); err != nil {

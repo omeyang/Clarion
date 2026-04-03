@@ -17,6 +17,7 @@ import (
 
 	"github.com/omeyang/clarion/internal/api/schema"
 	"github.com/omeyang/clarion/internal/service"
+	"github.com/omeyang/xkit/pkg/context/xtenant"
 )
 
 // e2eServer 构建一个完整的 HTTP 测试服务器，包含完整中间件链和内存仓储。
@@ -45,7 +46,8 @@ func doReq(t *testing.T, client *http.Client, method, url string, body string) *
 	if body != "" {
 		bodyReader = bytes.NewBufferString(body)
 	}
-	req, err := http.NewRequestWithContext(context.Background(), method, url, bodyReader)
+	ctx, _ := xtenant.WithTenantID(context.Background(), "test-tenant")
+	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 	require.NoError(t, err)
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")

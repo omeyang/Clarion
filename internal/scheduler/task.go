@@ -19,6 +19,7 @@ const TaskTypeOutboundCall = "outbound:call"
 
 // OutboundCallPayload 是外呼任务的有效载荷。
 type OutboundCallPayload struct {
+	TenantID   string `json:"tenant_id"`
 	CallID     int64  `json:"call_id"`
 	ContactID  int64  `json:"contact_id"`
 	TaskID     int64  `json:"task_id"`
