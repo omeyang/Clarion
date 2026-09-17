@@ -40,12 +40,12 @@ Clarion 当前是完全单租户的，所有数据共享一个命名空间，没
                           租户持有
                           ┌──────────────────────────────────────┐
                           │ API Key（长期凭据，创建时展示一次）      │
-                          │ ck_live_7Kd9mRqP4xYzN2wL5vBn8jF1hG  │
+                          │ ck_live_EXAMPLE0000000000000000000  │
                           └──────────────────┬───────────────────┘
                                              │
               ┌──────────────────────────────▼─────────────────────────────┐
               │ POST /api/v1/auth/token                                    │
-              │ Body: {"api_key": "ck_live_7Kd9mRqP..."}                  │
+              │ Body: {"api_key": "ck_live_EXAMPLE0..."}                  │
               │                                                            │
               │ 1. SHA-256(api_key) → 查 api_keys 表匹配 key_hash          │
               │ 2. 检查 key 状态 = active 且 租户状态 = active              │
@@ -78,7 +78,7 @@ Clarion 当前是完全单租户的，所有数据共享一个命名空间，没
 **格式**：`ck_live_` 前缀 + 32 字节 base62 随机串
 
 ```
-ck_live_7Kd9mRqP4xYzN2wL5vBn8jF1hG3tS6aE
+ck_live_EXAMPLE0000000000000000000000000
 ├─────┤ ├──────────────────────────────────┤
  前缀     32 字节 base62（~190 bit 熵）
 ```
@@ -123,7 +123,7 @@ ck_live_7Kd9mRqP4xYzN2wL5vBn8jF1hG3tS6aE
 CREATE TABLE IF NOT EXISTS api_keys (
     id           BIGSERIAL   PRIMARY KEY,
     tenant_id    UUID        NOT NULL REFERENCES tenants(id),
-    key_prefix   TEXT        NOT NULL,     -- 前 8 字符，用于展示（如 "ck_live_7K"）
+    key_prefix   TEXT        NOT NULL,     -- 前 8 字符，用于展示（如 "ck_live_EX"）
     key_hash     TEXT        NOT NULL,     -- SHA-256(完整 API Key)
     name         TEXT        NOT NULL DEFAULT '',  -- 描述，如 "生产环境"
     status       TEXT        NOT NULL DEFAULT 'active',  -- active / revoked
@@ -137,7 +137,7 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_tenant ON api_keys (tenant_id);
 
 **设计决策**：
 
-- `key_prefix` 保留前 8 字符 —— 管理时展示 `ck_live_7K******`，让管理员辨认是哪个 key
+- `key_prefix` 保留前 8 字符 —— 管理时展示 `ck_live_EX******`，让管理员辨认是哪个 key
 - `key_hash` 唯一索引 —— Token 端点通过哈希快速定位 key 记录
 - `last_used_at` —— 帮助管理员识别不再使用的 key，适时吊销
 
@@ -476,7 +476,7 @@ clarion admin create-tenant \
 
 # 创建 API Key（用 slug 指定租户，输出完整 key，仅展示一次）
 clarion admin create-apikey --tenant xian-fangchan --name "生产环境"
-# → API Key: ck_live_7Kd9mRqP4xYzN2wL5vBn8jF1hG3tS6aE
+# → API Key: ck_live_EXAMPLE0000000000000000000000000
 # → 请妥善保存，此密钥无法再次查看
 
 # 查看租户列表（显示 id + slug + name + status + 配额）

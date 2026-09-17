@@ -303,7 +303,7 @@ func TestHandleToken_ResponseFormat(t *testing.T) {
 // ── HashAPIKey 测试 ─────────────────────────────────────
 
 func TestHashAPIKey_Deterministic(t *testing.T) {
-	key := "ck_live_TestKey12345678901234567890"
+	key := "ck_live_FAKE0000000000000000000000000"
 	h1 := HashAPIKey(key)
 	h2 := HashAPIKey(key)
 	assert.Equal(t, h1, h2)

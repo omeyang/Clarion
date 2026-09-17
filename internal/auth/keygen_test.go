@@ -99,7 +99,7 @@ func BenchmarkGenerateAPIKey(b *testing.B) {
 }
 
 func BenchmarkHashAPIKey(b *testing.B) {
-	key := "ck_live_7Kd9mRqP4xYzN2wL5vBn8jF1hG3t"
+	key := "ck_live_EXAMPLE000000000000000000000"
 	b.ResetTimer()
 	for b.Loop() {
 		_ = HashAPIKey(key)
